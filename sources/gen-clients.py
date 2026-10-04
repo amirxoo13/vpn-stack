@@ -117,7 +117,12 @@ def build_fronts(ips, domain, path_xh, path_ws, extra, ws_count=1):
     تنوع اصلی از «چند front مختلف» می‌آید، نه از چند ترنسپورت.
     """
     fronts = []
-    n_xh = max(1, len(ips) - max(0, ws_count))
+    if ws_count < 0:
+        sys.exit("--ws-count نمی‌تواند منفی باشد.")
+    if ws_count > len(ips):
+        sys.exit("--ws-count=%d از تعداد IPها (%d) بیشتر است." % (ws_count, len(ips)))
+    # تعداد درخواستی همان است که help می‌گوید؛ اگر همه IPها WS باشند n_xh صفر است.
+    n_xh = len(ips) - ws_count
     for i, ip in enumerate(ips):
         if i < n_xh:
             fronts.append(("front-cf%d-xh" % (i + 1), ip, domain, "xhttp", path_xh))
@@ -404,11 +409,15 @@ def main():
     if users:
         write_uuid_list(args.state, users)
         print("کاربرها از %s خوانده شد و UUID_LIST به‌روز شد (%d)." % (args.config, len(users)))
+    elif os.path.isfile(args.config):
+        write_uuid_list(args.state, [])
+        sys.exit("در %s کلاینتی نیست. UUID_LIST قدیمی به‌جای کاربران حذف‌شده برنمی‌گردد."
+                 % args.config)
     else:
         users = [("user%d" % (i + 1), u) for i, u in enumerate(st.get("UUID_LIST", "").split()) if u]
         if not users:
             sys.exit("نه در config.json کلاینتی هست، نه UUID_LIST در state.env.")
-        print("config.json کلاینت نداشت؛ از UUID_LIST استفاده شد.")
+        print("config.json پیدا نشد؛ از UUID_LIST استفاده شد.")
 
     ips = [x.strip() for x in args.ips.split(",") if x.strip()]
     if len(ips) < 2:
@@ -427,8 +436,13 @@ def main():
     os.chmod(args.outdir, 0o700)
 
     ok = bad = unchecked = 0
+    used_names = {}
     for user, uuid in users:
         safe = re.sub(r"[^A-Za-z0-9._-]", "_", user) or "user"
+        if safe in used_names:
+            sys.exit("نام فایل برای «%s» و «%s» یکی می‌شود (%s). یکی از نام‌ها را عوض کن."
+                     % (used_names[safe], user, safe))
+        used_names[safe] = user
         xp = os.path.join(args.outdir, "xray-%s.json" % safe)
         with open(xp, "w", encoding="utf-8") as f:
             json.dump(build_xray(fronts, uuid, user, edge_port), f,

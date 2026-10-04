@@ -44,7 +44,8 @@ apply_new() {                         # CFG.new باید آماده باشد؛ �
     die "تست رد شد. کانفیگ در حال اجرا دست نخورد و Xray ری‌استارت نشد."
   fi
   mv "$CFG.new" "$CFG"
-  systemctl restart xray
+  # set -e نباید ری‌استارت ناموفق را قبل از برگرداندن پشتیبان قطع کند.
+  systemctl restart xray || true
   sleep 1
   if ! systemctl is-active --quiet xray; then
     cp "$bak" "$CFG"
@@ -57,7 +58,7 @@ apply_new() {                         # CFG.new باید آماده باشد؛ �
 sync_uuid_list() {
   local ids tmp
   ids=$(jq -r '[.inbounds[].settings.clients[]?.id | select(. != null and . != "")] | unique | join(" ")' "$CFG")
-  [[ -n $ids ]] || return 0
+  # لیست خالی هم باید UUID_LIST را پاک کند؛ وگرنه حذف آخرین کاربر کهنه می‌ماند.
   tmp=$(mktemp)
   if [[ -f $STATE ]] && grep -q '^UUID_LIST=' "$STATE"; then
     grep -v '^UUID_LIST=' "$STATE" >"$tmp"

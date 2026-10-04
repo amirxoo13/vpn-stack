@@ -70,7 +70,8 @@ function Find-TunnelPrograms {
 
 # ---------------------------------------------- پیدا کردن کارت شبکه‌ی مجازی تونل
 function Find-TunAdapters {
-    $pat = 'wintun|tun|wireguard|tap|sing-box|v2ray|Neko|Clash|Mihomo|OpenVPN'
+    # فقط نام‌های شناخته‌شده. tun|tap بدون مرز، «Teredo Tunneling» و ISATAP را هم می‌گیرد.
+    $pat = '(^|[^A-Za-z0-9])(wintun|wireguard|sing-box|singbox|v2ray|neko|clash|mihomo|openvpn|tun[0-9]*|tap[0-9]*)([^A-Za-z0-9]|$)'
     Get-NetAdapter -ErrorAction SilentlyContinue |
         Where-Object { $_.InterfaceDescription -match $pat -or $_.Name -match $pat } |
         Select-Object -ExpandProperty Name
@@ -235,8 +236,20 @@ if ($Enable) {
         -Profile Any -Enabled True | Out-Null
     Good "قواعد شبکه‌ی محلی و DHCP ساخته شد."
 
-    # ---- ۵) بستن خروجی پیش‌فرض
-    Set-NetFirewallProfile -All -DefaultOutboundAction Block
+    # ---- ۵) روشن کردن همه‌ی پروفایل‌ها، بعد بستن خروجی پیش‌فرض.
+    # اگر پروفایل خاموش بماند، DefaultOutboundAction اثری ندارد.
+    try {
+        Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True -ErrorAction Stop
+        Set-NetFirewallProfile -Profile Domain,Private,Public -DefaultOutboundAction Block -ErrorAction Stop
+    } catch {
+        Bad "کیل‌سوییچ روشن نشد: $($_.Exception.Message)"
+        exit 1
+    }
+    $stillOff = @(Get-NetFirewallProfile | Where-Object { "$($_.Enabled)" -eq 'False' })
+    if ($stillOff.Count -gt 0) {
+        Bad ("کیل‌سوییچ روشن نشد. این پروفایل‌ها هنوز خاموش‌اند: " + ($stillOff.Name -join ', '))
+        exit 1
+    }
     Good "کیل‌سوییچ روشن شد."
 
     Write-Host ""

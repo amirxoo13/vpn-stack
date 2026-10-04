@@ -16,6 +16,8 @@ gcloud compute firewall-rules list \
   --format="table(name,allowed[].map().firewall_rule().list(),sourceRanges.list())"
 
 CF=$(curl -fsS https://www.cloudflare.com/ips-v4 | paste -sd, -)
+CF=${CF//[[:space:]]/}
+[[ -n $CF ]] || { echo "لیست IP کلادفلر خالی است. بدون آن ادامه نمی‌دهم." >&2; exit 1; }
 echo "رنج کلادفلر گرفته شد."
 
 if gcloud compute firewall-rules describe vpn-origin-8443 >/dev/null 2>&1; then
@@ -51,4 +53,4 @@ done
 echo "بعد از تغییر:"
 gcloud compute firewall-rules list \
   --format="table(name,allowed[].map().firewall_rule().list(),sourceRanges.list())"
-echo "پورت 8443 و قاعده‌ی SSH دست نخوردند. هر قاعده‌ی دیگری که خودت ساخته باشی هم دست نخورده است."
+echo "پورت 8443 و قاعده‌ی SSH به‌روز شدند. هر قاعده‌ی دیگری که خودت ساخته باشی دست نخورده است."

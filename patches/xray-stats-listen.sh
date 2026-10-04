@@ -24,7 +24,8 @@ if ! xray -test -config "$CFG.new" >/tmp/stats-patch.log 2>&1; then
 fi
 
 mv "$CFG.new" "$CFG"
-systemctl restart xray
+# set -e نباید ری‌استارت ناموفق را قبل از برگرداندن پشتیبان قطع کند.
+systemctl restart xray || true
 sleep 1
 if ! systemctl is-active --quiet xray; then
   cp "$bak" "$CFG"

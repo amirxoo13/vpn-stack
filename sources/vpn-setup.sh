@@ -297,6 +297,15 @@ PATH_XH=${PATH_XH:-/$(openssl rand -hex 6)}
 PATH_WS=${PATH_WS:-/$(openssl rand -hex 6)}
 
 # UUIDها
+# بعد از حذف آخرین کاربر، config.json خالی است. UUID_LIST کهنه نباید
+# همان کاربرها را دوباره برگرداند.
+if [[ -f /usr/local/etc/xray/config.json ]]; then
+  _nclients=$(jq -r '[.inbounds[]?.settings.clients[]?.id | select(. != null and . != "")] | unique | length' \
+    /usr/local/etc/xray/config.json 2>/dev/null || true)
+  if [[ ${_nclients:-} == 0 ]]; then
+    UUID_LIST=""
+  fi
+fi
 if [[ -z ${UUID_LIST:-} ]]; then
   UUID_LIST=""
   for i in $(seq 1 "$USERS"); do
@@ -307,24 +316,31 @@ fi
 read -r -a UUIDS <<<"$UUID_LIST"
 ok "تعداد کاربر: ${#UUIDS[@]}"
 
-# ذخیره‌ی وضعیت برای اجراهای بعدی
+# ذخیره‌ی وضعیت برای اجراهای بعدی.
+# نقل‌قول طوری است که source بعدی، حتی با تک‌کوتیشن داخل ایمیل، مقدار را
+# اجرا نکند و همان را برگرداند.
+sh_sq() {
+  local s=$1
+  s=${s//\'/\'\\\'\'}
+  printf "'%s'" "$s"
+}
 cat >"$STATE_DIR/state.env" <<EOF
-DOMAIN='$DOMAIN'
-EMAIL='$EMAIL'
-CF_TOKEN='${CF_TOKEN:-none}'
-REALITY_SNI='$REALITY_SNI'
-REALITY_PRIV='$REALITY_PRIV'
-REALITY_PUB='$REALITY_PUB'
-REALITY_SID='$REALITY_SID'
-PATH_XH='$PATH_XH'
-PATH_WS='$PATH_WS'
-UUID_LIST='$UUID_LIST'
-PUBLIC_IP='$PUBLIC_IP'
-ORIGIN_PORT='$ORIGIN_PORT'
-REALITY_PORT='$REALITY_PORT'
-XHTTP_LOCAL='$XHTTP_LOCAL'
-WS_LOCAL='$WS_LOCAL'
-EDGE_PORT='$EDGE_PORT'
+DOMAIN=$(sh_sq "$DOMAIN")
+EMAIL=$(sh_sq "$EMAIL")
+CF_TOKEN=$(sh_sq "${CF_TOKEN:-none}")
+REALITY_SNI=$(sh_sq "$REALITY_SNI")
+REALITY_PRIV=$(sh_sq "$REALITY_PRIV")
+REALITY_PUB=$(sh_sq "$REALITY_PUB")
+REALITY_SID=$(sh_sq "$REALITY_SID")
+PATH_XH=$(sh_sq "$PATH_XH")
+PATH_WS=$(sh_sq "$PATH_WS")
+UUID_LIST=$(sh_sq "$UUID_LIST")
+PUBLIC_IP=$(sh_sq "$PUBLIC_IP")
+ORIGIN_PORT=$(sh_sq "$ORIGIN_PORT")
+REALITY_PORT=$(sh_sq "$REALITY_PORT")
+XHTTP_LOCAL=$(sh_sq "$XHTTP_LOCAL")
+WS_LOCAL=$(sh_sq "$WS_LOCAL")
+EDGE_PORT=$(sh_sq "$EDGE_PORT")
 EOF
 chmod 600 "$STATE_DIR/state.env"
 
@@ -457,6 +473,14 @@ ok "nginx راه‌اندازی شد."
 # =============================================================================
 say "نوشتن کانفیگ Xray ..."
 
+CFG=/usr/local/etc/xray/config.json
+PREV="$CFG.prev"
+HAD_PREV=0
+if [[ -f $CFG ]]; then
+  cp -a "$CFG" "$PREV"
+  HAD_PREV=1
+fi
+
 clients_json() {                 # clients_json <flow>
   local flow=$1 out="" i=1
   for u in "${UUIDS[@]}"; do
@@ -474,7 +498,7 @@ clients_json() {                 # clients_json <flow>
 CL_VISION=$(clients_json "xtls-rprx-vision")
 CL_PLAIN=$(clients_json "")
 
-cat >/usr/local/etc/xray/config.json <<XRAYCFG
+cat >"$CFG" <<XRAYCFG
 {
   "log": { "loglevel": "warning", "access": "none", "error": "/var/log/xray/error.log" },
 
@@ -575,7 +599,6 @@ mkdir -p /var/log/xray && chown -R nobody:nogroup /var/log/xray 2>/dev/null || t
 
 # نام برخی کلیدها بین نسخه‌های Xray عوض شده است.
 # اگر اعتبارسنجی رد شد، نام‌های جایگزین را امتحان می‌کنیم.
-CFG=/usr/local/etc/xray/config.json
 try_variants() {
   local variants=(
     "noop"
@@ -597,9 +620,14 @@ try_variants() {
     fi
     ((idx++))
   done
-  # هیچ واریانتی معتبر نشد: کانفیگ اولیه برگردانده می‌شود، پس خطایی که
-  # چاپ می‌کنیم هم باید مربوط به همان واریانت اول (noop) باشد.
-  cp "$CFG.orig" "$CFG"; rm -f "$CFG.orig"
+  # هیچ واریانتی معتبر نشد. اگر کانفیگ قبلی را کنار گذاشته‌ایم همان را
+  # برمی‌گردانیم؛ وگرنه واریانت اول (noop) می‌ماند تا خطا با همان جور باشد.
+  if [[ ${HAD_PREV:-0} -eq 1 && -f ${PREV:-} ]]; then
+    cp -a "$PREV" "$CFG"
+  else
+    cp "$CFG.orig" "$CFG"
+  fi
+  rm -f "$CFG.orig"
   cp /tmp/xraytest.0.log /tmp/xraytest.log 2>/dev/null || true
   return 1
 }
@@ -607,15 +635,30 @@ if ! try_variants; then
   echo "----- خروجی xray -test -----"
   cat /tmp/xraytest.log
   echo "----------------------------"
+  if [[ $HAD_PREV -eq 1 ]]; then
+    die "کانفیگ Xray ایراد دارد. کانفیگ قبلی برگردانده شد. متن خطای بالا را برای من بفرست."
+  fi
   die "کانفیگ Xray ایراد دارد. متن خطای بالا را برای من بفرست."
 fi
 
 systemctl daemon-reload
 systemctl enable xray >/dev/null 2>&1
-systemctl restart xray
+xray_restart_ok=0
+if systemctl restart xray; then
+  xray_restart_ok=1
+fi
 sleep 2
-systemctl is-active --quiet xray && ok "Xray در حال اجراست." || {
-  journalctl -u xray -n 30 --no-pager; die "Xray بالا نیامد."; }
+if [[ $xray_restart_ok -ne 1 ]] || ! systemctl is-active --quiet xray; then
+  journalctl -u xray -n 30 --no-pager || true
+  if [[ $HAD_PREV -eq 1 && -f $PREV ]]; then
+    cp -a "$PREV" "$CFG"
+    systemctl restart xray || true
+    die "Xray بالا نیامد. کانفیگ قبلی برگردانده شد."
+  fi
+  die "Xray بالا نیامد."
+fi
+rm -f "$PREV"
+ok "Xray در حال اجراست."
 
 # =============================================================================
 #  ۹. بررسی سلامت
@@ -751,7 +794,8 @@ else
 fi
 echo "پورت \$ORIGIN_PORT فقط از IP کلادفلر باز است."
 
-# SSH فقط از رنج IAP — پورت ۲۲ به دنیا باز نمی‌شود.
+# SSH از رنج IAP. اگر قاعده‌ی دیگری tcp/22 را از 0.0.0.0/0 یا ::/0
+# باز کرده باشد (مثل default-allow-ssh) فقط همان تنگ یا حذف می‌شود.
 if gcloud compute firewall-rules describe allow-iap-ssh >/dev/null 2>&1; then
   gcloud compute firewall-rules update allow-iap-ssh \\
     --rules=tcp:22 --source-ranges=35.235.240.0/20
@@ -760,7 +804,157 @@ else
     --direction=INGRESS --action=ALLOW --rules=tcp:22 \\
     --source-ranges=35.235.240.0/20 --priority=1000
 fi
-echo "SSH از IAP (35.235.240.0/20) باز است."
+
+ssh_world_closed=0
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "هشدار: python3 نیست؛ باز بودن پورت ۲۲ از دنیا بررسی نشد. فرض نکن بسته است." >&2
+else
+  # set -e نباید خروج غیرصفر را قبل از پیام بعدی قطع کند.
+  if python3 - <<'PY'
+import json
+import subprocess
+import sys
+
+WORLD = {"0.0.0.0/0", "::/0"}
+
+def port_includes_22(port):
+    text = str(port)
+    if text == "22":
+        return True
+    if "-" in text:
+        lo, hi = text.split("-", 1)
+        try:
+            return int(lo) <= 22 <= int(hi)
+        except ValueError:
+            return False
+    return False
+
+def allows_tcp22(allowed):
+    for entry in allowed or []:
+        proto = str(entry.get("IPProtocol", "")).lower()
+        if proto in ("all", "0"):
+            return True
+        if proto not in ("tcp", "6"):
+            continue
+        ports = entry.get("ports") or []
+        if not ports or any(port_includes_22(p) for p in ports):
+            return True
+    return False
+
+def only_exact_tcp22(allowed):
+    if not allowed:
+        return False
+    for entry in allowed:
+        proto = str(entry.get("IPProtocol", "")).lower()
+        ports = [str(p) for p in (entry.get("ports") or [])]
+        if proto not in ("tcp", "6") or ports != ["22"]:
+            return False
+    return True
+
+def rewrite_without_22(allowed):
+    new_rules = []
+    for entry in allowed or []:
+        proto = str(entry.get("IPProtocol", "")).lower()
+        ports = [str(p) for p in (entry.get("ports") or [])]
+        if proto in ("all", "0"):
+            return None
+        if proto in ("tcp", "6"):
+            if not ports:
+                new_rules.append("tcp:1-21")
+                new_rules.append("tcp:23-65535")
+                continue
+            for port in ports:
+                if port == "22":
+                    continue
+                if "-" in port:
+                    lo, hi = port.split("-", 1)
+                    try:
+                        loi, hii = int(lo), int(hi)
+                    except ValueError:
+                        new_rules.append("tcp:" + port)
+                        continue
+                    if loi <= 22 <= hii:
+                        if loi <= 21:
+                            new_rules.append("tcp:%d-21" % loi)
+                        if hii >= 23:
+                            new_rules.append("tcp:23-%d" % hii)
+                        continue
+                new_rules.append("tcp:" + port)
+        else:
+            if ports:
+                new_rules.append(proto + ":" + ",".join(ports))
+            else:
+                new_rules.append(proto)
+    return new_rules
+
+def world_ssh_rules(rules):
+    found = []
+    for rule in rules:
+        if rule.get("disabled"):
+            continue
+        if str(rule.get("direction") or "INGRESS").upper() != "INGRESS":
+            continue
+        sources = list(rule.get("sourceRanges") or [])
+        if not (set(sources) & WORLD):
+            continue
+        if not allows_tcp22(rule.get("allowed") or []):
+            continue
+        found.append(rule)
+    return found
+
+raw = subprocess.check_output(
+    ["gcloud", "compute", "firewall-rules", "list", "--format=json"],
+    text=True)
+rules = json.loads(raw)
+for rule in world_ssh_rules(rules):
+    name = rule["name"]
+    sources = list(rule.get("sourceRanges") or [])
+    kept = [s for s in sources if s not in WORLD]
+    allowed = rule.get("allowed") or []
+    if only_exact_tcp22(allowed):
+        if kept:
+            subprocess.check_call([
+                "gcloud", "compute", "firewall-rules", "update", name,
+                "--source-ranges=" + ",".join(kept)])
+            print("تنگ شد؛ tcp/22 دیگر از دنیا نیست: " + name)
+        else:
+            subprocess.check_call([
+                "gcloud", "compute", "firewall-rules", "delete", name, "--quiet"])
+            print("حذف شد؛ tcp/22 از 0.0.0.0/0 یا ::/0 بود: " + name)
+        continue
+    if kept:
+        subprocess.check_call([
+            "gcloud", "compute", "firewall-rules", "update", name,
+            "--source-ranges=" + ",".join(kept)])
+        print("منبع دنیا از قاعده‌ای که پورت ۲۲ را باز می‌کرد برداشته شد: " + name)
+        continue
+    rewritten = rewrite_without_22(allowed)
+    if rewritten is None or not rewritten:
+        print("هشدار: قاعده " + name + " پورت ۲۲ را از دنیا باز می‌کند و بدون دست زدن به بقیه‌ی اجازه‌ها بسته نشد.")
+        continue
+    subprocess.check_call([
+        "gcloud", "compute", "firewall-rules", "update", name,
+        "--rules=" + ",".join(rewritten)])
+    print("پورت ۲۲ از قاعده برداشته شد، بقیه‌ی اجازه‌ها ماند: " + name)
+
+raw = subprocess.check_output(
+    ["gcloud", "compute", "firewall-rules", "list", "--format=json"],
+    text=True)
+left = [r["name"] for r in world_ssh_rules(json.loads(raw))]
+if left:
+    print("هشدار: پورت ۲۲ هنوز از 0.0.0.0/0 یا ::/0 باز است: " + ", ".join(left))
+    sys.exit(2)
+print("پورت ۲۲ از کل اینترنت بسته است؛ SSH فقط از IAP باز است.")
+PY
+  then
+    ssh_world_closed=1
+  else
+    true
+  fi
+fi
+if [[ \$ssh_world_closed -ne 1 ]]; then
+  echo "پورت ۲۲ لزوماً از کل اینترنت بسته نیست." >&2
+fi
 
 if [[ \$OPEN_DIRECT == 1 ]]; then
   # مسیر مستقیم REALITY — از همه‌جا. فقط اگر IP سرور از خط تو در دسترس باشد.
@@ -768,15 +962,23 @@ if [[ \$OPEN_DIRECT == 1 ]]; then
     --direction=INGRESS --action=ALLOW --rules="tcp:\$REALITY_PORT" \\
     --source-ranges=0.0.0.0/0 --priority=1000 2>/dev/null || \\
   gcloud compute firewall-rules update "vpn-reality-\$REALITY_PORT" --rules="tcp:\$REALITY_PORT"
-  # سایت پوششی روی ۸۰
-  gcloud compute firewall-rules create vpn-web-80 \\
-    --direction=INGRESS --action=ALLOW --rules=tcp:80 \\
-    --source-ranges=0.0.0.0/0 --priority=1000 2>/dev/null || true
-  echo "پورت \$REALITY_PORT و ۸۰ باز شد (OPEN_DIRECT=1)."
+  if gcloud compute firewall-rules describe vpn-web-80 >/dev/null 2>&1; then
+    gcloud compute firewall-rules update vpn-web-80 \\
+      --rules=tcp:80 --source-ranges=0.0.0.0/0
+  else
+    gcloud compute firewall-rules create vpn-web-80 \\
+      --direction=INGRESS --action=ALLOW --rules=tcp:80 \\
+      --source-ranges=0.0.0.0/0 --priority=1000
+  fi
+  if gcloud compute firewall-rules describe vpn-web-80 >/dev/null 2>&1; then
+    echo "پورت \$REALITY_PORT و ۸۰ باز شد (OPEN_DIRECT=1)."
+  else
+    echo "قاعده‌ی vpn-web-80 ساخته نشد؛ پورت ۸۰ باز نشده است." >&2
+    exit 1
+  fi
 else
   echo "OPEN_DIRECT=0 — پورت \$REALITY_PORT و ۸۰ باز نشد. مسیر C وصل نمی‌شود."
 fi
-
 if [[ \$OPEN_UDP_TEST == 1 ]]; then
   # پورت‌های تست UDP — بعد از اتمام تست حتما حذف کن
   gcloud compute firewall-rules create vpn-udp-test \\
