@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # در Google Cloud Shell اجرا شود، نه روی VM.
 # پورت 8443 را باز نگه می‌دارد. پروفایل CF-HU-8443 به همین پورت وصل است.
-# فقط دو قاعده‌ای را پاک می‌کند که vpn-setup.sh ساخته: vpn-reality-443 و vpn-web-80.
-# قاعدهٔ SSH پیش‌فرض پروژه را پاک نمی‌کند.
+# vpn-setup.sh چهار قاعده می‌سازد. این فایل سه تایش را پاک می‌کند:
+# vpn-reality-443، vpn-web-80، vpn-udp-test.
+# vpn-origin-8443 را نگه می‌دارد. xui-vpn-ports و SSH پیش‌فرض را پاک نمی‌کند.
 set -euo pipefail
 
 echo "قبل از تغییر:"
@@ -33,7 +34,7 @@ fi
 echo "SSH از IAP (35.235.240.0/20) باز است."
 
 gcloud compute firewall-rules describe vpn-origin-8443 >/dev/null
-for name in vpn-reality-443 vpn-web-80; do
+for name in vpn-reality-443 vpn-web-80 vpn-udp-test; do
   if gcloud compute firewall-rules describe "$name" >/dev/null 2>&1; then
     gcloud compute firewall-rules delete "$name" --quiet
     echo "حذف شد: $name"
@@ -45,4 +46,4 @@ done
 echo "بعد از تغییر:"
 gcloud compute firewall-rules list \
   --format="table(name,allowed[].map().firewall_rule().list(),sourceRanges.list())"
-echo "پورت 8443 پاک نشد. اگر جای دیگری غیر از این دو قاعده، 443 را باز کرده باشی، این اسکریپت به آن دست نمی‌زند."
+echo "پورت 8443 پاک نشد. xui-vpn-ports و قاعدهٔ SSH پیش‌فرض دست نخوردند."

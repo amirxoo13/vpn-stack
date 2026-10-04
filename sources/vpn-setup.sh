@@ -656,7 +656,7 @@ LINKS="$CRED_DIR/links.txt"
 } >>"$LINKS"
 chmod 600 "$LINKS"
 
-# QR کد برای user1 روی هر سه مسیر
+# QR کد برای user1 فقط روی مسیر A و C. مسیر B در این بلوک ساخته نمی‌شود.
 QR="$CRED_DIR/qr-user1.txt"
 {
   echo "--- QR مسیر A (XHTTP/CDN) — user1 ---"

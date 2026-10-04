@@ -136,8 +136,11 @@ case "$ACTION" in
              .settings.clients[] | select(.email==$n) | .id' "$CFG")
     [[ -n $UUID && $UUID != null ]] || die "کاربر «$NAME» پیدا نشد."
     exh=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$PATH_XH")
+    ews=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$PATH_WS")
     echo "QR مسیر A (XHTTP/CDN) برای $NAME:"
     qrencode -t ANSIUTF8 -o - "vless://$UUID@$DOMAIN:443?encryption=none&security=tls&sni=$DOMAIN&fp=chrome&alpn=h2%2Chttp%2F1.1&type=xhttp&host=$DOMAIN&path=$exh&mode=packet-up#A-$NAME"
+    echo "QR مسیر B (WebSocket/CDN) برای $NAME:"
+    qrencode -t ANSIUTF8 -o - "vless://$UUID@$DOMAIN:443?encryption=none&security=tls&sni=$DOMAIN&fp=chrome&type=ws&host=$DOMAIN&path=$ews#B-$NAME"
     ;;
 
   *)
