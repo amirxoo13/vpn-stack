@@ -22,11 +22,10 @@ leaktest.py  —  تست واقعی لیک IP و DNS
 
 import argparse
 import json
-import re
+import os
 import socket
 import ssl
 import sys
-import urllib.error
 import urllib.request
 
 TIMEOUT = 12
@@ -102,20 +101,30 @@ def ptr(ip):
 
 
 def tls_reachable(host, port=443, timeout=10):
-    """آیا می‌توان با این SNI هندشیک TLS کامل کرد؟"""
-    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+    """
+    آیا می‌توان با این دامنه هندشیک TLS کامل و *معتبر* کرد؟
+
+    گواهی را تأیید می‌کنیم. اگر این کار را نکنیم، صفحه‌ی مسدودی ایران هم
+    یک هندشیک موفق می‌دهد و تست به اشتباه «سالم» نشان می‌دهد.
+    برمی‌گرداند (ok, detail, ip)
+    """
+    ctx = ssl.create_default_context()
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.settimeout(timeout)
+    ip = None
     try:
         s.connect((host, port))
+        ip = s.getpeername()[0]
+        if ip.startswith(("10.10.34.", "10.10.35.")):
+            return False, "به صفحه‌ی مسدودی ایران وصل شد", ip
         ss = ctx.wrap_socket(s, server_hostname=host)
         v = ss.version()
         ss.close()
-        return True, v
+        return True, v, ip
+    except ssl.SSLCertVerificationError as e:
+        return False, "گواهی تأیید نشد (%s)" % e.verify_message, ip
     except Exception as e:
-        return False, type(e).__name__
+        return False, type(e).__name__, ip
     finally:
         try:
             s.close()
@@ -127,14 +136,17 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--expect", default="BE",
                     help="کد کشور سرورت، مثلا BE برای بلژیک")
+    ap.add_argument("--out", default="leaktest_report.json",
+                    help="فایل گزارش. با رشته‌ی خالی ذخیره نمی‌شود.")
     args = ap.parse_args()
+
+    report = {"expect": args.expect.upper()}
 
     print("\nleaktest — تست لیک IP و DNS")
     print("این تست را وقتی به تونل وصل هستی اجرا کن.\n")
 
     # ---------------------------------------------------------------- ۱) IPv4
     print("── ۱) آدرس IPv4ی که دنیا از تو می‌بیند ──")
-    trace = None
     my4 = None
     try:
         trace = get("https://www.cloudflare.com/cdn-cgi/trace")
@@ -149,8 +161,10 @@ def main():
                 "انتظار %s بود، %s دیده شد" % (args.expect.upper(), loc.upper()))
         if loc.upper() == "IR":
             print(f"  {R}>>> ترافیک تو از تونل عبور نمی‌کند. تونل وصل نیست یا مسیریابی اشتباه است.{N}")
+        report["egress"] = {"ip": my4, "loc": loc, "colo": kv.get("colo")}
     except Exception as e:
         verdict(False, "دریافت trace از کلادفلر ناموفق", type(e).__name__)
+        report["egress"] = {"error": type(e).__name__}
 
     if not my4:
         try:
@@ -195,6 +209,8 @@ def main():
         print(f"  {Y}    سرور تو IPv6 ندارد، پس هر سایت IPv6-دار IP واقعی‌ات را می‌بیند.{N}")
     else:
         verdict(True, "IPv6 نشتی ندارد", "اتصال IPv6 برقرار نشد — همین درست است")
+    report["ipv6"] = {"leak": v6_leak, "ip": v6_ip,
+                      "local_global_addrs": sorted(set(globals6))}
 
     # -------------------------------------------------------------- ۳) لیک DNS
     print("\n── ۳) کدام resolver پرس‌وجوهای تو را می‌بیند؟ ──")
@@ -219,8 +235,10 @@ def main():
         else:
             note("جغرافیای رزولور قابل تشخیص نبود",
                  "خودت IP بالا را در ipinfo.io چک کن")
+        report["resolver"] = {"ip": resolver_ip, "ptr": ptr(resolver_ip), "geo": gr}
     except Exception as e:
         note("تست رزولور ناموفق", type(e).__name__)
+        report["resolver"] = {"error": type(e).__name__}
 
     # --------------------------------------------- ۴) DNS دستکاری‌شده‌ی ایران
     print("\n── ۴) آیا DNS دستکاری‌شده هنوز فعال است؟ ──")
@@ -240,14 +258,21 @@ def main():
     verdict(not hijack, "پاسخ‌های DNS سالم",
             ("دستکاری‌شده: " + ", ".join(d for d, _ in hijack)) if hijack
             else "هیچ پاسخی به 10.10.34.x نرفت")
+    report["dns"] = {"hijacked": dict(hijack), "clean": dict(clean)}
 
     # ------------------------------------- ۵) آیا سایت‌های مسدود باز شده‌اند؟
     print("\n── ۵) آیا دامنه‌های مسدود واقعا باز شده‌اند؟ ──")
+    reach = {}
     for d in ("www.youtube.com", "twitter.com"):
-        okc, info = tls_reachable(d)
-        verdict(okc, "هندشیک TLS با %s" % d, str(info))
+        okc, info, rip = tls_reachable(d)
+        reach[d] = {"ok": okc, "detail": str(info), "ip": rip}
+        verdict(okc, "هندشیک TLS معتبر با %s" % d,
+                "%s%s" % (info, "  [%s]" % rip if rip else ""))
 
     # ------------------------------------------------------------------ نتیجه
+    report["blocked_sites"] = reach
+    report["summary"] = {"pass": PASS, "fail": FAIL}
+
     print("\n" + "=" * 62)
     if FAIL == 0:
         print(f"{G}نتیجه: {PASS} تست سالم، هیچ لیکی پیدا نشد.{N}")
@@ -260,6 +285,11 @@ def main():
     print("  browserleaks.com/webrtc         — لیک WebRTC")
     print("  dnsleaktest.com  (Extended)     — همه‌ی رزولورها")
     print("در ipleak.net بخش DNS باید فقط کلادفلر یا گوگل نشان بدهد، هیچ ISP ایرانی.\n")
+
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+        print("گزارش در %s ذخیره شد.\n" % os.path.abspath(args.out))
 
 
 if __name__ == "__main__":

@@ -40,7 +40,8 @@ import time
 
 # ---------------------------------------------------------------------------
 # لبه‌ها. IPها anycast و پایدارند.
-#   proxyable = آیا این لبه می‌تواند به سرور دلخواه تو reverse-proxy کند؟
+#   proxyable = یادداشت دستی، نه نتیجه‌ی اندازه‌گیری. این ابزار آن را نمی‌سنجد؛
+#               فقط می‌گوید لبه‌ای که ایستا است اصلا به درد front نمی‌خورد.
 # ---------------------------------------------------------------------------
 FRONTS = [
     # نام,                    IPها,                              SNI سرویس,                  سرویس لیست‌سفید,        proxyable
@@ -118,6 +119,9 @@ def probe(ip, sni, port=443):
 
 def best(results):
     """از چند IP، بهترین نتیجه را برمی‌گرداند."""
+    results = [r for r in (results or []) if r]
+    if not results:
+        return {"ip": None, "sni": None, "tcp": "?", "tls": "?", "ms": None}
     ok = [r for r in results if r["tls"] == "OK"]
     if ok:
         return min(ok, key=lambda r: r["ms"])
@@ -172,12 +176,11 @@ def main():
     usable = []
     for name, ips, svc_sni, whitelisted, proxyable in FRONTS:
         g = raw.get(name, {})
-        b_svc = best(g.get("service", [{"tcp": "?", "tls": "?", "ms": None}]))
-        b_mine = best(g.get("mydomain", [{"tcp": "?", "tls": "?", "ms": None}]))
-        b_rnd = best(g.get("random", [{"tcp": "?", "tls": "?", "ms": None}]))
+        b_svc = best(g.get("service"))
+        b_mine = best(g.get("mydomain"))
+        b_rnd = best(g.get("random"))
 
         edge_up = b_svc["tcp"] == "OPEN" or b_mine["tcp"] == "OPEN"
-        svc_ok = b_svc["tls"] == "OK"
         # SNI دلخواه: اگر دامنه‌ی خودت یا یک SNI تصادفی هندشیک شد، یعنی
         # DPI آن لبه را با SNI ناشناس نمی‌کشد
         arb_ok = b_mine["tls"] == "OK" or b_rnd["tls"] == "OK"
@@ -187,12 +190,16 @@ def main():
             verdict = "لبه بسته است"
         elif not proxyable:
             verdict = "قابل استفاده نیست (ایستا، پروکسی نمی‌کند)"
+        elif arb_ok:
+            # حتی اگر یکی از دو SNI دلخواه RST خورده باشد، وقتی دیگری
+            # هندشیک کامل می‌کند این لبه عملا کار می‌کند.
+            verdict = "قابل استفاده به عنوان front"
+            if arb_killed:
+                verdict += " (ولی یکی از دو SNI دلخواه RST خورد)"
+            cand = best((g.get("mydomain") or []) + (g.get("random") or []))
+            usable.append((name, b_mine["ms"] or b_rnd["ms"] or 9999, cand["ip"]))
         elif arb_killed:
             verdict = "لبه باز، ولی DPI SNI ناشناس را می‌کشد"
-        elif arb_ok:
-            verdict = "قابل استفاده به عنوان front"
-            usable.append((name, b_mine["ms"] or b_rnd["ms"] or 9999,
-                           best(g.get("mydomain") or g.get("random"))["ip"]))
         elif b_mine["tls"] == "SNI-REJECT" and b_rnd["tls"] == "SNI-REJECT":
             verdict = "لبه باز؛ باید اول دامنه را روی آن ثبت کنی"
         else:

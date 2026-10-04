@@ -11,8 +11,10 @@ irnet_probe.py  -  Iran network reachability prober
 فقط کتابخانه‌های استاندارد پایتون. هیچ pip install لازم نیست.
 
 اجرا:
-    python irnet_probe.py
     python irnet_probe.py --vm-ip 34.156.152.38 --domain cdn.amirxo.com
+
+--vm-ip و --domain اجباری‌اند: این اسکریپت مقدار پیش‌فرضی برای سرور کسی
+ندارد و نباید داشته باشد.
 """
 
 import argparse
@@ -30,9 +32,6 @@ import time
 # ----------------------------------------------------------------------------
 # تنظیمات پیش‌فرض
 # ----------------------------------------------------------------------------
-
-DEFAULT_VM_IP = "34.156.152.38"          # VM بلژیک شما در گوگل کلود
-DEFAULT_DOMAIN = "cdn.amirxo.com"        # ساب‌دامینی که قرار است بسازیم
 
 CONNECT_TIMEOUT = 6.0
 TLS_TIMEOUT = 8.0
@@ -158,22 +157,26 @@ def tls_probe(ip, port, sni, timeout=TLS_TIMEOUT, fragment=False):
         "tls_version": None, "cipher": None, "server_hello_bytes": 0,
     }
 
-    ok, label, rtt = tcp_connect(ip, port, timeout=CONNECT_TIMEOUT)
-    res["tcp"] = label
-    res["rtt_ms"] = rtt
-    if not ok:
-        res["tls"] = "SKIPPED(no-tcp)"
-        return res
-
     if not fragment:
-        # مسیر ساده: از ssl استاندارد استفاده کن
+        # مسیر ساده: یک اتصال، هم TCP را می‌سنجد هم TLS را.
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(timeout)
+        s.settimeout(CONNECT_TIMEOUT)
+        t0 = time.time()
         try:
             s.connect((ip, port))
+        except Exception as e:
+            res["tcp"] = classify_exc(e)
+            res["rtt_ms"] = round((time.time() - t0) * 1000.0, 1)
+            res["tls"] = "SKIPPED(no-tcp)"
+            s.close()
+            return res
+        res["tcp"] = "OPEN"
+        res["rtt_ms"] = round((time.time() - t0) * 1000.0, 1)
+        try:
+            s.settimeout(timeout)
             ss = ctx.wrap_socket(s, server_hostname=sni)
             res["tls"] = "HANDSHAKE-OK"
             res["tls_version"] = ss.version()
@@ -194,6 +197,13 @@ def tls_probe(ip, port, sni, timeout=TLS_TIMEOUT, fragment=False):
         return res
 
     # مسیر تکه‌تکه
+    ok, label, rtt = tcp_connect(ip, port, timeout=CONNECT_TIMEOUT)
+    res["tcp"] = label
+    res["rtt_ms"] = rtt
+    if not ok:
+        res["tls"] = "SKIPPED(no-tcp)"
+        return res
+
     ch = build_client_hello(sni)
     if not ch:
         res["tls"] = "ERROR(no-clienthello)"
@@ -344,31 +354,47 @@ def system_dns_hijack_test():
 
 def mtu_probe(ip, port=443, low=1200, high=1500):
     """
-    بزرگ‌ترین اندازه‌ی پیلود TCP که بدون مشکل عبور می‌کند را تقریب می‌زند.
-    برای تنظیم MTU تونل مفید است.
+    بزرگ‌ترین بسته‌ای که بدون تکه‌تکه شدن از مسیر رد می‌شود (Path MTU).
+
+    این کار فقط با بیت DF معنی دارد. پایتون ثابت IP_MTU_DISCOVER را صادر
+    نمی‌کند، پس روی لینوکس مقدار عددی خودش را می‌گذاریم. روی ویندوز و مک
+    این تست انجام نمی‌شود — عدد ساختگی نمی‌دهیم.
+
+    عدد برگشتی اندازه‌ی کل بسته‌ی IP است، نه پیلود.
     """
+    if not sys.platform.startswith("linux"):
+        return {"status": "UNSUPPORTED(%s: DF در دسترس نیست)" % sys.platform,
+                "max_packet": None}
+
+    IP_MTU_DISCOVER, IP_PMTUDISC_DO = 10, 2     # <linux/in.h>
+
     ok, label, _ = tcp_connect(ip, port)
     if not ok:
-        return {"status": "SKIPPED(%s)" % label, "max_payload": None}
+        return {"status": "SKIPPED(%s)" % label, "max_packet": None}
+
     best = None
     lo, hi = low, high
     while lo <= hi:
         mid = (lo + hi) // 2
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(5.0)
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(2.0)
         try:
-            s.connect((ip, port))
-            s.sendall(b"A" * mid)
+            s.setsockopt(socket.IPPROTO_IP, IP_MTU_DISCOVER, IP_PMTUDISC_DO)
+            # ۲۸ بایت سرآیند IP + UDP از اندازه‌ی بسته کم می‌شود
+            s.sendto(b"M" * (mid - 28), (ip, port))
             best = mid
             lo = mid + 1
-        except Exception:
+        except OSError:
+            # EMSGSIZE یعنی این اندازه با DF رد نمی‌شود
             hi = mid - 1
         finally:
             try:
                 s.close()
             except Exception:
                 pass
-    return {"status": "OK", "max_payload": best}
+    if best is None:
+        return {"status": "NO-ANSWER(<%d)" % low, "max_packet": None}
+    return {"status": "OK", "max_packet": best}
 
 
 # ----------------------------------------------------------------------------
@@ -526,15 +552,16 @@ def summarize(rep):
     hij = [d for d, v in rep["dns_hijack"].items() if v.get("hijacked")]
     A("• DNS دستکاری‌شده برای: %s" % (", ".join(hij) if hij else "هیچ‌کدام"))
 
-    A("• حداکثر پیلود عبوری (برای MTU): %s" % rep["mtu"].get("max_payload"))
+    A("• بزرگ‌ترین بسته‌ی بدون تکه‌شدن (Path MTU): %s  [%s]"
+      % (rep["mtu"].get("max_packet"), rep["mtu"].get("status")))
     A("=" * 72)
     return "\n".join(lines)
 
 
 def main():
     ap = argparse.ArgumentParser(description="Iran network reachability prober")
-    ap.add_argument("--vm-ip", default=DEFAULT_VM_IP)
-    ap.add_argument("--domain", default=DEFAULT_DOMAIN)
+    ap.add_argument("--vm-ip", required=True, help="IP عمومی VM خودت")
+    ap.add_argument("--domain", required=True, help="دامنه‌ای که روی کلادفلر داری یا می‌سازی")
     ap.add_argument("--udp-port", type=int, default=40000,
                     help="پورت UDP که udp_echo_server.py روی VM گوش می‌دهد")
     ap.add_argument("--out", default="irnet_report.json")

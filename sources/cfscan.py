@@ -154,7 +154,8 @@ def main():
     ap.add_argument("--download", action="store_true",
                     help="سرعت دانلود واقعی را هم اندازه بگیر (بعد از راه‌اندازی سرور)")
     ap.add_argument("--dl-path", default="/assets/sprite.bin",
-                    help="فایلی روی سرور برای تست دانلود")
+                    help="فایلی روی سرور برای تست دانلود. بدون --download "
+                         "مسیر / گرفته می‌شود، پس ستون http به همان مربوط است.")
     ap.add_argument("--out", default="cfscan_result.json")
     args = ap.parse_args()
 
@@ -164,6 +165,8 @@ def main():
     print("!! فیلترشکن باید قطع باشد. !!\n")
 
     ips = sample_ips(args.count)
+    if len(ips) < args.count:
+        print("  (فقط %d آدرس یکتا از %d خواسته‌شده ساخته شد)" % (len(ips), args.count))
     good = []
     done = 0
     t0 = time.monotonic()

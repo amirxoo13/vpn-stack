@@ -23,10 +23,10 @@ gen-clients.py — ساخت کانفیگ چند مسیره با failover خود�
 
 ضد لیک:
   - queryStrategy / strategy = فقط IPv4   (سرور IPv6 ندارد)
-  - DNS با DoH و از داخل تونل، نه از خط محلی
-  - دامنه‌های .ir مستقیم، بقیه از تونل
+  - دامنه‌های .ir از رزولور محلی و مستقیم؛ بقیه با DoH از داخل تونل
   - domainStrategy = AsIs  یعنی کلاینت هیچ دامنه‌ای را محلی resolve نمی‌کند
-  - IPهای خصوصی و متادیتای کلود بلاک
+  - IPهای خصوصی مستقیم (تا شبکه‌ی خانه از کار نیفتد)
+  - متادیتای کلود و bittorrent بلاک
 
 --- استفاده ---
   sudo python3 gen-clients.py --ips 104.16.132.229,172.64.150.28,188.114.96.3,162.159.140.238
@@ -45,12 +45,17 @@ import subprocess
 import sys
 
 STATE = "/etc/vpnstack/state.env"
+CFG_DEFAULT = "/usr/local/etc/xray/config.json"
 OUTDIR = "/root/vpn-info/clients"
 
 SOCKS_PORT = 10808      # پورت پیش‌فرض v2rayN — حالت TUN خودکار کار می‌کند
 HTTP_PORT = 10809
 DOH = "https://1.1.1.1/dns-query"
 PROBE_URL = "https://www.gstatic.com/generate_204"
+DEFAULT_EDGE_PORT = 443     # پورت لبه‌ی کلادفلر؛ از state.env خوانده می‌شود
+# متادیتای کلود: نه کلاینت و نه سرور نباید از تونل به آن برسد
+METADATA_IPS = ["169.254.169.254/32"]
+METADATA_DOMAINS = ["metadata.google.internal"]
 
 
 # ---------------------------------------------------------------- خواندن state
@@ -63,10 +68,42 @@ def load_state(path=STATE):
             m = re.match(r"^\s*([A-Z_]+)\s*=\s*'(.*)'\s*$", line)
             if m:
                 st[m.group(1)] = m.group(2)
-    for k in ("DOMAIN", "PATH_XH", "PATH_WS", "UUID_LIST"):
+    for k in ("DOMAIN", "PATH_XH", "PATH_WS"):
         if not st.get(k):
             sys.exit("کلید %s در %s نیست." % (k, path))
     return st
+
+
+def users_from_config(path):
+    """کاربر را از config.json می‌خواند، نه از UUID_LIST قدیمی."""
+    if not path or not os.path.isfile(path):
+        return []
+    with open(path, encoding="utf-8") as f:
+        cfg = json.load(f)
+    out, seen = [], set()
+    for ib in cfg.get("inbounds") or []:
+        clients = (ib.get("settings") or {}).get("clients") or []
+        for c in clients:
+            uid = c.get("id")
+            if not uid or uid in seen:
+                continue
+            seen.add(uid)
+            out.append((c.get("email") or ("user%d" % (len(out) + 1)), uid))
+    return out
+
+
+def write_uuid_list(state_path, users):
+    ids = " ".join(uid for _, uid in users)
+    lines = []
+    if os.path.isfile(state_path):
+        with open(state_path, encoding="utf-8") as f:
+            lines = [ln for ln in f.readlines() if not ln.startswith("UUID_LIST=")]
+    lines.append("UUID_LIST='%s'\n" % ids)
+    tmp = state_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, state_path)
 
 
 # ------------------------------------------------------- ساخت لیست frontها
@@ -99,7 +136,7 @@ def build_fronts(ips, domain, path_xh, path_ws, extra, ws_count=1):
 
 
 # =========================================================== کانفیگ Xray
-def xray_front_outbound(tag, ip, host, transport, path, uuid):
+def xray_front_outbound(tag, ip, host, transport, path, uuid, edge_port):
     tls = {
         "serverName": host,
         "allowInsecure": False,
@@ -123,7 +160,7 @@ def xray_front_outbound(tag, ip, host, transport, path, uuid):
         "protocol": "vless",
         "settings": {"vnext": [{
             "address": ip,
-            "port": 443,
+            "port": edge_port,
             "users": [{"id": uuid, "encryption": "none", "level": 0}],
         }]},
         "streamSettings": stream,
@@ -131,8 +168,8 @@ def xray_front_outbound(tag, ip, host, transport, path, uuid):
     }
 
 
-def build_xray(fronts, uuid, user):
-    outs = [xray_front_outbound(t, ip, h, tr, p, uuid)
+def build_xray(fronts, uuid, user, edge_port):
+    outs = [xray_front_outbound(t, ip, h, tr, p, uuid, edge_port)
             for (t, ip, h, tr, p) in fronts]
     outs.append({"tag": "direct", "protocol": "freedom",
                  "settings": {"domainStrategy": "UseIPv4"}})
@@ -181,10 +218,14 @@ def build_xray(fronts, uuid, user):
                 "strategy": {"type": "leastPing"},
             }],
             "rules": [
+                # متادیتای کلود: بلاک، نه direct. وگرنه هر چیزی روی دستگاه
+                # می‌تواند از آن توکن بگیرد.
+                {"type": "field", "ip": METADATA_IPS, "outboundTag": "block"},
+                {"type": "field", "domain": METADATA_DOMAINS, "outboundTag": "block"},
                 {"type": "field", "ip": ["geoip:private", "169.254.0.0/16"],
                  "outboundTag": "direct"},
                 {"type": "field", "domain": ["domain:ir"], "outboundTag": "direct"},
-                {"type": "field", "protocol": ["bittorrent"], "outboundTag": "direct"},
+                {"type": "field", "protocol": ["bittorrent"], "outboundTag": "block"},
                 {"type": "field", "network": "tcp,udp", "balancerTag": "bal-auto"},
             ],
         },
@@ -195,12 +236,12 @@ def build_xray(fronts, uuid, user):
 
 
 # ======================================================== کانفیگ sing-box
-def singbox_front_outbound(tag, ip, host, path, uuid):
+def singbox_front_outbound(tag, ip, host, path, uuid, edge_port):
     return {
         "type": "vless",
         "tag": tag,
         "server": ip,
-        "server_port": 443,
+        "server_port": edge_port,
         "uuid": uuid,
         "packet_encoding": "xudp",
         "tls": {
@@ -214,12 +255,28 @@ def singbox_front_outbound(tag, ip, host, path, uuid):
     }
 
 
-def build_singbox(fronts, uuid, user, path_ws):
+def singbox_tag(front_tag):
+    """تگ sing-box از تگ front. همه‌ی outboundها اینجا WebSocket هستند،
+    پس پسوند -xh باید به -ws عوض شود تا نام با واقعیت بخواند."""
+    name = front_tag[len("front-"):] if front_tag.startswith("front-") else front_tag
+    if name.endswith("-xh"):
+        name = name[:-3] + "-ws"
+    name = re.sub(r"[^a-z0-9-]", "", name.lower())
+    return name or "front"
+
+
+def build_singbox(fronts, uuid, user, path_ws, edge_port):
     # sing-box از XHTTP پشتیبانی نمی‌کند، پس همه‌ی frontها را WebSocket می‌کنیم
     ws = []
+    used = set()
     for (tag, ip, host, _tr, _p) in fronts:
-        ws.append(singbox_front_outbound(
-            tag.replace("front-", "").replace("-xh", "-ws"), ip, host, path_ws, uuid))
+        t = singbox_tag(tag)
+        base, n = t, 2
+        while t in used:                      # تگ تکراری کانفیگ را رد می‌کند
+            t = "%s-%d" % (base, n)
+            n += 1
+        used.add(t)
+        ws.append(singbox_front_outbound(t, ip, host, path_ws, uuid, edge_port))
     tags = [o["tag"] for o in ws]
 
     return {
@@ -256,7 +313,7 @@ def build_singbox(fronts, uuid, user, path_ws):
              "outbounds": ["auto"] + tags, "default": "auto"},
             # ---- قلب failover ----
             {"type": "urltest", "tag": "auto", "outbounds": tags,
-             "url": "https://cp.cloudflare.com/generate_204",
+             "url": PROBE_URL,
              "interval": "3m", "tolerance": 60,
              "idle_timeout": "30m",
              "interrupt_exist_connections": False},
@@ -271,6 +328,9 @@ def build_singbox(fronts, uuid, user, path_ws):
             "rules": [
                 {"action": "sniff"},
                 {"protocol": "dns", "action": "hijack-dns"},
+                {"protocol": "bittorrent", "action": "reject"},
+                {"ip_cidr": METADATA_IPS, "action": "reject"},
+                {"domain": METADATA_DOMAINS, "action": "reject"},
                 {"ip_is_private": True, "outbound": "direct"},
                 {"domain_suffix": [".ir"], "outbound": "direct"},
             ],
@@ -322,14 +382,33 @@ def main():
     ap.add_argument("--ws-count", type=int, default=1,
                     help="چند front روی WebSocket باشد (پیش‌فرض ۱، بقیه XHTTP)")
     ap.add_argument("--outdir", default=OUTDIR)
+    ap.add_argument("--config", default=CFG_DEFAULT,
+                    help="منبع کاربر: clients داخل config.json")
     ap.add_argument("--state", default=STATE)
+    ap.add_argument("--edge-port", type=int, default=None,
+                    help="پورت لبه‌ی کلادفلر؛ پیش‌فرض از EDGE_PORT در state.env")
     args = ap.parse_args()
 
     st = load_state(args.state)
     domain = st["DOMAIN"]
     path_xh = st["PATH_XH"]
     path_ws = st["PATH_WS"]
-    uuids = st["UUID_LIST"].split()
+    if args.edge_port is not None:
+        edge_port = args.edge_port
+    else:
+        try:
+            edge_port = int(st.get("EDGE_PORT") or DEFAULT_EDGE_PORT)
+        except ValueError:
+            sys.exit("EDGE_PORT در %s عدد نیست." % args.state)
+    users = users_from_config(args.config)
+    if users:
+        write_uuid_list(args.state, users)
+        print("کاربرها از %s خوانده شد و UUID_LIST به‌روز شد (%d)." % (args.config, len(users)))
+    else:
+        users = [("user%d" % (i + 1), u) for i, u in enumerate(st.get("UUID_LIST", "").split()) if u]
+        if not users:
+            sys.exit("نه در config.json کلاینتی هست، نه UUID_LIST در state.env.")
+        print("config.json کلاینت نداشت؛ از UUID_LIST استفاده شد.")
 
     ips = [x.strip() for x in args.ips.split(",") if x.strip()]
     if len(ips) < 2:
@@ -338,26 +417,27 @@ def main():
     fronts = build_fronts(ips, domain, path_xh, path_ws,
                           args.extra_front, args.ws_count)
 
-    print("\nfrontهایی که ساخته می‌شوند:")
+    print("\nfrontهایی که ساخته می‌شوند (پورت لبه: %d):" % edge_port)
     for (tag, ip, host, tr, p) in fronts:
         print("   %-18s %-16s  %-8s host=%s  path=%s" % (tag, ip, tr, host, p))
-    print("\n%d کاربر × ۲ کانفیگ\n" % len(uuids))
+    print("\n%d کاربر × ۲ کانفیگ\n" % len(users))
+    print("این فایل‌ها هیچ پروفایل فعالی را عوض نمی‌کنند. تا وقتی خودت import نکنی، اتصال فعلی قطع نمی‌شود.")
 
     os.makedirs(args.outdir, exist_ok=True)
     os.chmod(args.outdir, 0o700)
 
-    ok = bad = 0
-    for i, uuid in enumerate(uuids, start=1):
-        user = "user%d" % i
-
-        xp = os.path.join(args.outdir, "xray-%s.json" % user)
+    ok = bad = unchecked = 0
+    for user, uuid in users:
+        safe = re.sub(r"[^A-Za-z0-9._-]", "_", user) or "user"
+        xp = os.path.join(args.outdir, "xray-%s.json" % safe)
         with open(xp, "w", encoding="utf-8") as f:
-            json.dump(build_xray(fronts, uuid, user), f, ensure_ascii=False, indent=2)
+            json.dump(build_xray(fronts, uuid, user, edge_port), f,
+                      ensure_ascii=False, indent=2)
         os.chmod(xp, 0o600)
 
-        sp = os.path.join(args.outdir, "singbox-%s.json" % user)
+        sp = os.path.join(args.outdir, "singbox-%s.json" % safe)
         with open(sp, "w", encoding="utf-8") as f:
-            json.dump(build_singbox(fronts, uuid, user, path_ws), f,
+            json.dump(build_singbox(fronts, uuid, user, path_ws, edge_port), f,
                       ensure_ascii=False, indent=2)
         os.chmod(sp, 0o600)
 
@@ -371,15 +451,18 @@ def main():
             bad += 1
         else:
             line += "  xray [?]"
+            unchecked += 1
 
         vs, ms = validate_singbox(sp)
         if vs is True:
             line += "   sing-box [✓]"
+            ok += 1
         elif vs is False:
             line += "   sing-box [✗]"
             bad += 1
         else:
             line += "   sing-box [-]"
+            unchecked += 1
         print(line)
         if vx is False:
             print("      xray: %s" % mx[:400])
@@ -388,6 +471,8 @@ def main():
 
     print("\n" + "=" * 68)
     print("کانفیگ‌ها در %s" % args.outdir)
+    print("اعتبارسنجی: %d سالم، %d ایرادناک، %d بررسی‌نشده (هسته‌اش نصب نیست)."
+          % (ok, bad, unchecked))
     if bad:
         print("!! %d کانفیگ ایراد داشت — متن خطای بالا را بفرست." % bad)
     print("=" * 68)

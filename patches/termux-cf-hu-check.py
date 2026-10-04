@@ -1,29 +1,31 @@
 #!/usr/bin/env python3
-"""Termux check for the working path only.
+"""Termux check for one HTTPUpgrade path.
 
-Checks DNS, TCP/8443, TLS with ALPN http/1.1, and the HTTPUpgrade
-status line. It does not send a VLESS UUID, so it cannot prove login.
+Checks DNS, TCP on the edge port, TLS with ALPN http/1.1, and the
+HTTPUpgrade status line. It does not send a VLESS UUID, so it cannot
+prove login.
+
+The domain, port and path have no safe default: pass them in.
+
+    python3 termux-cf-hu-check.py --domain cdn.example.com --port 8443 --path /yourpath
 """
 
+import argparse
 import base64
+import json
 import os
 import re
 import socket
 import ssl
 import subprocess
-import sys
 import time
 from datetime import datetime
 
-DOMAIN = "cdn.amirxo.com"
-PORT = 8443
-PATH = "/amirhu"
-SNI = "cdn.amirxo.com"
 TIMEOUT = 8
 
-# Pinned in the working client, plus the two addresses in the older script.
-# Any address inside these Cloudflare ranges is also accepted.
-PINNED = ["188.114.97.3", "188.114.96.3", "188.114.97.11", "188.114.96.11"]
+# Edge addresses to try. Any address inside the Cloudflare ranges below is
+# also accepted by the range check.
+DEFAULT_EDGE_IPS = ["188.114.97.3", "188.114.96.3", "188.114.97.11", "188.114.96.11"]
 CF_NETS = [
     ("188.114.96.0", 20),
     ("104.16.0.0", 13),
@@ -106,19 +108,24 @@ def tools():
 
 def interfaces():
     title("1. IS A VPN ALREADY UP?")
-    code, out = run(["ip", "addr"], timeout=5)
+    _code, out = run(["ip", "addr"], timeout=5)
     print(out or "no ip output")
-    if "tun" in out.lower() or "wg" in out.lower():
-        print("[WARN] a tunnel interface exists. Stop the VPN, then run this again.")
+    # match interface names only, not any occurrence of "tun" in the output
+    names = re.findall(r"^\d+:\s+([^:@]+)", out, re.M)
+    tunnels = [n for n in names if re.match(r"(tun|tap|wg|utun)\d*$", n.strip())]
+    if tunnels:
+        print("[WARN] tunnel interface(s) %s exist. Stop the VPN, then run this again."
+              % ", ".join(tunnels))
     else:
         print("[PASS] no tun/wg interface seen")
+    return names
 
 
-def dns():
+def dns(domain, port):
     title("2. DNS")
     found = {}
     try:
-        infos = socket.getaddrinfo(DOMAIN, PORT, type=socket.SOCK_STREAM)
+        infos = socket.getaddrinfo(domain, port, type=socket.SOCK_STREAM)
         ips = sorted(set(x[4][0] for x in infos))
         print("system:", ", ".join(ips) or "none")
         found["system"] = ips
@@ -126,7 +133,7 @@ def dns():
         print("[FAIL] system resolver:", e)
         found["system"] = []
     for name, server in DNS_SERVERS:
-        code, out = run(["nslookup", DOMAIN, server], timeout=7)
+        _code, out = run(["nslookup", domain, server], timeout=7)
         ips = []
         for line in out.splitlines():
             m = re.search(r"(\d+\.\d+\.\d+\.\d+)", line)
@@ -147,12 +154,12 @@ def dns():
     return found
 
 
-def tcp(ip):
+def tcp(ip, port):
     started = time.perf_counter()
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(TIMEOUT)
     try:
-        sock.connect((ip, PORT))
+        sock.connect((ip, port))
         return True, (time.perf_counter() - started) * 1000, ""
     except Exception as e:
         return False, (time.perf_counter() - started) * 1000, str(e)
@@ -160,7 +167,7 @@ def tcp(ip):
         sock.close()
 
 
-def upgrade(ip):
+def upgrade(ip, domain, port, path):
     title("3. TCP + TLS + HTTPUpgrade  %s" % ip)
     ctx = ssl.create_default_context()
     ctx.set_alpn_protocols(["http/1.1"])
@@ -168,10 +175,10 @@ def upgrade(ip):
     raw.settimeout(TIMEOUT)
     try:
         started = time.perf_counter()
-        raw.connect((ip, PORT))
+        raw.connect((ip, port))
         tcp_ms = (time.perf_counter() - started) * 1000
-        print("[PASS] TCP/8443  %.0f ms" % tcp_ms)
-        tls = ctx.wrap_socket(raw, server_hostname=SNI)
+        print("[PASS] TCP/%d  %.0f ms" % (port, tcp_ms))
+        tls = ctx.wrap_socket(raw, server_hostname=domain)
         print("[PASS] TLS %s  ALPN %s" % (tls.version(), tls.selected_alpn_protocol()))
         cert = tls.getpeercert()
         names = []
@@ -179,8 +186,8 @@ def upgrade(ip):
             if item[0] == "DNS":
                 names.append(item[1])
         print("cert names:", ", ".join(names) or "none")
-        if DOMAIN not in names:
-            print("[WARN] certificate has no DNS name %s" % DOMAIN)
+        if domain not in names:
+            print("[WARN] certificate has no DNS name %s" % domain)
         key = base64.b64encode(os.urandom(16)).decode()
         req = (
             "GET %s HTTP/1.1\r\n"
@@ -191,7 +198,7 @@ def upgrade(ip):
             "Sec-WebSocket-Version: 13\r\n"
             "User-Agent: Mozilla/5.0\r\n"
             "\r\n"
-        ) % (PATH, SNI, key)
+        ) % (path, domain, key)
         tls.sendall(req.encode())
         data = tls.recv(4096)
         text = data.decode("utf-8", errors="replace")
@@ -214,29 +221,51 @@ def upgrade(ip):
 
 
 def main():
-    title("CF-HU-8443 CHECK")
-    print("domain", DOMAIN, "port", PORT, "path", PATH)
+    ap = argparse.ArgumentParser(description="HTTPUpgrade edge check")
+    ap.add_argument("--domain", required=True, help="your Cloudflare-proxied hostname")
+    ap.add_argument("--path", required=True, help="the HTTPUpgrade path, e.g. /abc123")
+    ap.add_argument("--port", type=int, default=8443,
+                    help="Cloudflare edge port (default 8443)")
+    ap.add_argument("--ip", action="append", default=[],
+                    help="edge IP to test; repeatable. Defaults to a built-in list "
+                         "plus whatever DNS returns for --domain.")
+    ap.add_argument("--out", default="", help="write a JSON report to this file")
+    args = ap.parse_args()
+
+    title("HTTPUpgrade EDGE CHECK  %s:%d%s" % (args.domain, args.port, args.path))
     print("started", datetime.now().isoformat())
     tools()
     interfaces()
-    dns()
+    resolved = dns(args.domain, args.port)
+
     targets = []
-    for ip in PINNED:
+    # ۱) آن‌چه خود کاربر داده، ۲) آن‌چه DNS برگرداند، ۳) فهرست پیش‌فرض
+    for ip in list(args.ip) + sorted({x for v in resolved.values() for x in v
+                                      if ":" not in x}) + DEFAULT_EDGE_IPS:
         if ip not in targets:
             targets.append(ip)
+
     results = {}
     for ip in targets:
-        ok, ms, err = tcp(ip)
+        ok, ms, err = tcp(ip, args.port)
         if not ok:
             print("[FAIL] %s TCP %s after %.0f ms" % (ip, err, ms))
             results[ip] = "TCP FAIL"
             continue
-        results[ip] = upgrade(ip)
+        results[ip] = upgrade(ip, args.domain, args.port, args.path)
     title("RESULT")
     for ip, status in results.items():
         print("%-16s %s" % (ip, status))
     print("101 means the edge accepted the upgrade. It does not test VLESS or the UUID.")
-    print("Any other status means this phone cannot use that edge for the working path.")
+    print("Any other status means this phone cannot use that edge for this path.")
+
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as f:
+            json.dump({"domain": args.domain, "port": args.port, "path": args.path,
+                       "dns": resolved, "results": results,
+                       "generated_at": datetime.now().isoformat()},
+                      f, ensure_ascii=False, indent=2)
+        print("report written to %s" % os.path.abspath(args.out))
 
 
 if __name__ == "__main__":

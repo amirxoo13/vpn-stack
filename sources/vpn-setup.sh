@@ -4,14 +4,20 @@
 # =============================================================================
 #  چه چیزی نصب می‌کند:
 #
-#   مسیر A (اصلی، از طریق کلادفلر):
-#       کلاینت → IP کلادفلر:443 → nginx روی VM:8443 → Xray (XHTTP / WebSocket)
-#       مزیت: IPی که کلاینت می‌بیند مال کلادفلر است، پس IP شما هرگز
-#              بلاک نمی‌شود. پورت 8443 فقط برای کلادفلر باز است.
+#   نام‌گذاری مسیرها همان است که در links.txt چاپ می‌شود:
 #
-#   مسیر B (پشتیبان، مستقیم):
-#       کلاینت → VM:443 → Xray VLESS + REALITY (XTLS-Vision)
-#       مزیت: بدون واسطه، سریع‌تر. عیب: IP قابل بلاک شدن است.
+#   مسیر A (اصلی، از طریق کلادفلر، XHTTP):
+#       کلاینت → IP کلادفلر:EDGE_PORT → nginx روی VM:ORIGIN_PORT → Xray XHTTP
+#       مزیت: IPی که کلاینت می‌بیند مال کلادفلر است، پس IP شما هرگز
+#              بلاک نمی‌شود. ORIGIN_PORT فقط برای کلادفلر باز است.
+#
+#   مسیر B (پشتیبان مسیر A، از طریق کلادفلر، WebSocket):
+#       کلاینت → IP کلادفلر:EDGE_PORT → nginx روی VM:ORIGIN_PORT → Xray WS
+#
+#   مسیر C (مستقیم):
+#       کلاینت → VM:REALITY_PORT → Xray VLESS + REALITY (XTLS-Vision)
+#       بدون واسطه و سریع‌تر، ولی IP قابل بلاک شدن است. قاعده‌ی فایروالش
+#       فقط با OPEN_DIRECT=1 ساخته می‌شود.
 #
 #   سایت پوششی واقعی روی / تا هر کسی که IP یا دامنه را اسکن کند
 #   یک سایت معمولی ببیند، نه یک سرور پروکسی.
@@ -21,6 +27,11 @@
 #  یا بدون سوال:
 #       sudo DOMAIN=cdn.amirxo.com CF_TOKEN=xxx EMAIL=you@mail.com \
 #            USERS=8 bash vpn-setup.sh
+#
+#  متغیرهای محیطی اختیاری:
+#       ORIGIN_PORT (8443)  REALITY_PORT (443)  EDGE_PORT (443)
+#       XHTTP_LOCAL (2001)  WS_LOCAL (2002)     USERS (8)
+#       OPEN_DIRECT (0)     OPEN_UDP_TEST (0)
 # =============================================================================
 
 set -euo pipefail
@@ -46,7 +57,15 @@ ORIGIN_PORT=${ORIGIN_PORT:-8443}     # پورتی که کلادفلر به آن 
 REALITY_PORT=${REALITY_PORT:-443}    # پورت مسیر مستقیم
 XHTTP_LOCAL=${XHTTP_LOCAL:-2001}
 WS_LOCAL=${WS_LOCAL:-2002}
+# پورتی که کلاینت روی لبه‌ی کلادفلر به آن وصل می‌شود. کلادفلر خودش این پورت
+# را به ORIGIN_PORT روی سرور می‌رساند؛ این نگاشت در پنل کلادفلر است، نه اینجا.
+# هر دو 443 و 8443 از پورت‌های پروکسی‌شده‌ی کلادفلر هستند.
+EDGE_PORT=${EDGE_PORT:-443}
 USERS=${USERS:-8}
+# با OPEN_DIRECT=1 اسکریپت فایروال، قواعد مسیر مستقیم (443) و وب (80) را هم می‌سازد.
+# پیش‌فرض خاموش است: راهنمای پروژه می‌گوید IP سرور از ایران بلک‌هول است.
+OPEN_DIRECT=${OPEN_DIRECT:-0}
+OPEN_UDP_TEST=${OPEN_UDP_TEST:-0}    # قواعد موقت تست UDP
 
 mkdir -p "$STATE_DIR" "$CRED_DIR" "$CERT_DIR"
 chmod 700 "$STATE_DIR" "$CRED_DIR"
@@ -103,9 +122,11 @@ ok "IP عمومی سرور: ${PUBLIC_IP:-نامشخص}"
 say "نصب بسته‌های لازم ..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
+# cron برای تمدید خودکار گواهی توسط acme.sh لازم است.
+# unzip را نصب‌کننده‌ی رسمی Xray لازم دارد.
 apt-get install -y -qq --no-install-recommends \
-  curl wget socat unzip jq qrencode openssl ca-certificates \
-  nginx dnsutils uuid-runtime python3 cron >/dev/null
+  curl unzip jq qrencode openssl ca-certificates \
+  nginx python3 cron >/dev/null
 ok "بسته‌ها نصب شد."
 
 # =============================================================================
@@ -301,6 +322,9 @@ UUID_LIST='$UUID_LIST'
 PUBLIC_IP='$PUBLIC_IP'
 ORIGIN_PORT='$ORIGIN_PORT'
 REALITY_PORT='$REALITY_PORT'
+XHTTP_LOCAL='$XHTTP_LOCAL'
+WS_LOCAL='$WS_LOCAL'
+EDGE_PORT='$EDGE_PORT'
 EOF
 chmod 600 "$STATE_DIR/state.env"
 
@@ -340,7 +364,7 @@ fi
 # --- سازگاری: nginx >= 1.25 از «http2 on;» استفاده می‌کند، قبل‌ترها از «listen ... http2»
 NGX_VER=$(nginx -v 2>&1 | sed -n 's#.*nginx/\([0-9.]*\).*#\1#p')
 NGX_MAJ=${NGX_VER%%.*}; NGX_MIN=$(echo "$NGX_VER" | cut -d. -f2)
-if (( NGX_MAJ > 1 || (NGX_MAJ == 1 && NGX_MIN >= 26) )); then
+if (( NGX_MAJ > 1 || (NGX_MAJ == 1 && NGX_MIN >= 25) )); then
   LISTEN_SSL="    listen $ORIGIN_PORT ssl default_server;
     http2 on;"
 else
@@ -543,7 +567,7 @@ cat >/usr/local/etc/xray/config.json <<XRAYCFG
     "system": { "statsInboundUplink": true, "statsInboundDownlink": true }
   },
   "stats": {},
-  "api": { "tag": "api", "services": [ "StatsService" ] }
+  "api": { "tag": "api", "listen": "127.0.0.1:10085", "services": [ "StatsService" ] }
 }
 XRAYCFG
 
@@ -560,17 +584,23 @@ try_variants() {
     's/"target": "/"dest": "/; s/"xhttp"/"splithttp"/; s/"xhttpSettings"/"splithttpSettings"/'
   )
   cp "$CFG" "$CFG.orig"
+  local idx=0
   for v in "${variants[@]}"; do
     cp "$CFG.orig" "$CFG"
     [[ $v != noop ]] && sed -i "$v" "$CFG"
-    if xray -test -config "$CFG" >/tmp/xraytest.log 2>&1; then
+    if xray -test -config "$CFG" >"/tmp/xraytest.$idx.log" 2>&1; then
       [[ $v == noop ]] && ok "کانفیگ Xray معتبر است." \
         || ok "کانفیگ با نام‌های سازگار نسخه‌ی قدیمی‌تر معتبر شد."
+      cp "/tmp/xraytest.$idx.log" /tmp/xraytest.log
       rm -f "$CFG.orig"
       return 0
     fi
+    ((idx++))
   done
+  # هیچ واریانتی معتبر نشد: کانفیگ اولیه برگردانده می‌شود، پس خطایی که
+  # چاپ می‌کنیم هم باید مربوط به همان واریانت اول (noop) باشد.
   cp "$CFG.orig" "$CFG"; rm -f "$CFG.orig"
+  cp /tmp/xraytest.0.log /tmp/xraytest.log 2>/dev/null || true
   return 1
 }
 if ! try_variants; then
@@ -603,6 +633,10 @@ say "تولید لینک‌های اتصال ..."
 ENC_XH=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$PATH_XH")
 ENC_WS=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$PATH_WS")
 
+# لینک‌ها به $EDGE_PORT روی لبه‌ی کلادفلر وصل می‌شوند، نه به $ORIGIN_PORT.
+# کلادفلر پورت لبه را به مبدأ می‌رساند؛ آن نگاشت در پنل کلادفلر تنظیم می‌شود.
+# mode=packet-up در لینک با "mode":"auto" در inbound سرور تعارضی ندارد:
+# auto سمت سرور یعنی هر حالتی که کلاینت انتخاب کند پذیرفته می‌شود.
 LINKS="$CRED_DIR/links.txt"
 : >"$LINKS"
 {
@@ -616,7 +650,7 @@ LINKS="$CRED_DIR/links.txt"
   i=1
   for u in "${UUIDS[@]}"; do
     echo "user$i:"
-    echo "vless://$u@$DOMAIN:443?encryption=none&security=tls&sni=$DOMAIN&fp=chrome&alpn=h2%2Chttp%2F1.1&type=xhttp&host=$DOMAIN&path=$ENC_XH&mode=packet-up#A-xhttp-user$i"
+    echo "vless://$u@$DOMAIN:$EDGE_PORT?encryption=none&security=tls&sni=$DOMAIN&fp=chrome&alpn=h2%2Chttp%2F1.1&type=xhttp&host=$DOMAIN&path=$ENC_XH&mode=packet-up#A-xhttp-user$i"
     echo
     ((i++))
   done
@@ -625,12 +659,18 @@ LINKS="$CRED_DIR/links.txt"
   i=1
   for u in "${UUIDS[@]}"; do
     echo "user$i:"
-    echo "vless://$u@$DOMAIN:443?encryption=none&security=tls&sni=$DOMAIN&fp=chrome&type=ws&host=$DOMAIN&path=$ENC_WS#B-ws-user$i"
+    echo "vless://$u@$DOMAIN:$EDGE_PORT?encryption=none&security=tls&sni=$DOMAIN&fp=chrome&type=ws&host=$DOMAIN&path=$ENC_WS#B-ws-user$i"
     echo
     ((i++))
   done
 
-  echo "### مسیر C — REALITY مستقیم به IP سرور  (سریع‌ترین، ولی IP قابل بلاک)"
+  echo "### مسیر C — REALITY مستقیم به IP سرور"
+  if [[ $OPEN_DIRECT == 1 ]]; then
+    echo "### پورت $REALITY_PORT با OPEN_DIRECT=1 باز می‌شود. IP سرور قابل بلاک است."
+  else
+    echo "### هشدار: OPEN_DIRECT=0 است، پس قاعده‌ی فایروال پورت $REALITY_PORT ساخته نمی‌شود"
+    echo "### و این لینک‌ها وصل نمی‌شوند. اگر IP سرور از خط تو بلک‌هول است، همین درست است."
+  fi
   i=1
   for u in "${UUIDS[@]}"; do
     echo "user$i:"
@@ -643,8 +683,9 @@ LINKS="$CRED_DIR/links.txt"
   echo "پارامترهای خام (برای وارد کردن دستی):"
   echo "  دامنه (SNI/Host) : $DOMAIN"
   echo "  IP سرور          : $PUBLIC_IP"
-  echo "  پورت مسیر مستقیم : $REALITY_PORT"
+  echo "  پورت لبه‌ی کلادفلر: $EDGE_PORT"
   echo "  پورت مبدأ کلادفلر: $ORIGIN_PORT"
+  echo "  پورت مسیر مستقیم : $REALITY_PORT"
   echo "  مسیر XHTTP       : $PATH_XH   (mode = packet-up)"
   echo "  مسیر WebSocket   : $PATH_WS"
   echo "  REALITY SNI      : $REALITY_SNI"
@@ -656,11 +697,14 @@ LINKS="$CRED_DIR/links.txt"
 } >>"$LINKS"
 chmod 600 "$LINKS"
 
-# QR کد برای user1 فقط روی مسیر A و C. مسیر B در این بلوک ساخته نمی‌شود.
+# QR کد برای user1 روی هر سه مسیر A، B و C
 QR="$CRED_DIR/qr-user1.txt"
 {
   echo "--- QR مسیر A (XHTTP/CDN) — user1 ---"
-  qrencode -t ANSIUTF8 -o - "vless://${UUIDS[0]}@$DOMAIN:443?encryption=none&security=tls&sni=$DOMAIN&fp=chrome&alpn=h2%2Chttp%2F1.1&type=xhttp&host=$DOMAIN&path=$ENC_XH&mode=packet-up#A-xhttp-user1"
+  qrencode -t ANSIUTF8 -o - "vless://${UUIDS[0]}@$DOMAIN:$EDGE_PORT?encryption=none&security=tls&sni=$DOMAIN&fp=chrome&alpn=h2%2Chttp%2F1.1&type=xhttp&host=$DOMAIN&path=$ENC_XH&mode=packet-up#A-xhttp-user1"
+  echo
+  echo "--- QR مسیر B (WebSocket/CDN) — user1 ---"
+  qrencode -t ANSIUTF8 -o - "vless://${UUIDS[0]}@$DOMAIN:$EDGE_PORT?encryption=none&security=tls&sni=$DOMAIN&fp=chrome&type=ws&host=$DOMAIN&path=$ENC_WS#B-ws-user1"
   echo
   echo "--- QR مسیر C (REALITY مستقیم) — user1 ---"
   qrencode -t ANSIUTF8 -o - "vless://${UUIDS[0]}@$PUBLIC_IP:$REALITY_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$REALITY_SNI&fp=chrome&pbk=$REALITY_PUB&sid=$REALITY_SID&type=tcp&headerType=none#C-reality-user1"
@@ -672,44 +716,80 @@ ok "لینک‌ها در $LINKS ذخیره شد."
 #  ۱۱. دستورات فایروال گوگل کلود
 # =============================================================================
 FW="$CRED_DIR/gcloud-firewall.sh"
-cat >"$FW" <<'FWEOF'
+cat >"$FW" <<FWEOF
 #!/usr/bin/env bash
 # این دستورات را در Google Cloud Shell اجرا کن (نه روی VM).
 # رنج IPهای کلادفلر از https://www.cloudflare.com/ips-v4 گرفته می‌شود.
+#
+# پیش‌فرض دقیقا دو قاعده می‌سازد، همان چیزی که راهنمای پروژه می‌گوید:
+#   vpn-origin-8443  مبدأ کلادفلر، فقط از IPهای کلادفلر
+#   allow-iap-ssh    دسترسی SSH فقط از رنج IAP گوگل
+# قواعد اختیاری با متغیر محیطی روشن می‌شوند:
+#   OPEN_DIRECT=1    پورت $REALITY_PORT (مسیر مستقیم REALITY) و ۸۰ (سایت پوششی)
+#   OPEN_UDP_TEST=1  پورت‌های موقت تست UDP
 set -e
 
-CF=$(curl -fsS https://www.cloudflare.com/ips-v4 | paste -sd, -)
-echo "رنج‌های کلادفلر: $CF"
+OPEN_DIRECT=\${OPEN_DIRECT:-$OPEN_DIRECT}
+OPEN_UDP_TEST=\${OPEN_UDP_TEST:-$OPEN_UDP_TEST}
+ORIGIN_PORT=$ORIGIN_PORT
+REALITY_PORT=$REALITY_PORT
+UDP_TEST_PORT=\${UDP_TEST_PORT:-40000}
 
-# مسیر مستقیم REALITY — از همه‌جا
-gcloud compute firewall-rules create vpn-reality-443 \
-  --direction=INGRESS --action=ALLOW --rules=tcp:443 \
-  --source-ranges=0.0.0.0/0 --priority=1000 2>/dev/null || \
-gcloud compute firewall-rules update vpn-reality-443 --rules=tcp:443
+CF=\$(curl -fsS https://www.cloudflare.com/ips-v4 | paste -sd, -)
+[[ -n \$CF ]] || { echo "گرفتن رنج کلادفلر ناموفق بود؛ بدون آن ادامه نمی‌دهم."; exit 1; }
+echo "رنج‌های کلادفلر گرفته شد."
 
 # مبدأ کلادفلر — فقط از IPهای کلادفلر. این مهم‌ترین قدم امنیتی است:
 # هیچ‌کس جز کلادفلر نمی‌تواند سرور اصلی را ببیند یا پروب کند.
-gcloud compute firewall-rules create vpn-origin-8443 \
-  --direction=INGRESS --action=ALLOW --rules=tcp:8443 \
-  --source-ranges="$CF" --priority=1000 2>/dev/null || \
-gcloud compute firewall-rules update vpn-origin-8443 --source-ranges="$CF"
+if gcloud compute firewall-rules describe "vpn-origin-\$ORIGIN_PORT" >/dev/null 2>&1; then
+  gcloud compute firewall-rules update "vpn-origin-\$ORIGIN_PORT" \\
+    --rules="tcp:\$ORIGIN_PORT" --source-ranges="\$CF"
+else
+  gcloud compute firewall-rules create "vpn-origin-\$ORIGIN_PORT" \\
+    --direction=INGRESS --action=ALLOW --rules="tcp:\$ORIGIN_PORT" \\
+    --source-ranges="\$CF" --priority=1000
+fi
+echo "پورت \$ORIGIN_PORT فقط از IP کلادفلر باز است."
 
-# سایت پوششی روی ۸۰ (اختیاری ولی طبیعی‌تر است)
-gcloud compute firewall-rules create vpn-web-80 \
-  --direction=INGRESS --action=ALLOW --rules=tcp:80 \
-  --source-ranges=0.0.0.0/0 --priority=1000 2>/dev/null || true
+# SSH فقط از رنج IAP — پورت ۲۲ به دنیا باز نمی‌شود.
+if gcloud compute firewall-rules describe allow-iap-ssh >/dev/null 2>&1; then
+  gcloud compute firewall-rules update allow-iap-ssh \\
+    --rules=tcp:22 --source-ranges=35.235.240.0/20
+else
+  gcloud compute firewall-rules create allow-iap-ssh \\
+    --direction=INGRESS --action=ALLOW --rules=tcp:22 \\
+    --source-ranges=35.235.240.0/20 --priority=1000
+fi
+echo "SSH از IAP (35.235.240.0/20) باز است."
 
-# پورت‌های تست UDP — بعد از اتمام تست حتما حذف کن
-gcloud compute firewall-rules create vpn-udp-test \
-  --direction=INGRESS --action=ALLOW --rules=udp:53,udp:1194,udp:40000,udp:51820 \
-  --source-ranges=0.0.0.0/0 --priority=1000 2>/dev/null || true
+if [[ \$OPEN_DIRECT == 1 ]]; then
+  # مسیر مستقیم REALITY — از همه‌جا. فقط اگر IP سرور از خط تو در دسترس باشد.
+  gcloud compute firewall-rules create "vpn-reality-\$REALITY_PORT" \\
+    --direction=INGRESS --action=ALLOW --rules="tcp:\$REALITY_PORT" \\
+    --source-ranges=0.0.0.0/0 --priority=1000 2>/dev/null || \\
+  gcloud compute firewall-rules update "vpn-reality-\$REALITY_PORT" --rules="tcp:\$REALITY_PORT"
+  # سایت پوششی روی ۸۰
+  gcloud compute firewall-rules create vpn-web-80 \\
+    --direction=INGRESS --action=ALLOW --rules=tcp:80 \\
+    --source-ranges=0.0.0.0/0 --priority=1000 2>/dev/null || true
+  echo "پورت \$REALITY_PORT و ۸۰ باز شد (OPEN_DIRECT=1)."
+else
+  echo "OPEN_DIRECT=0 — پورت \$REALITY_PORT و ۸۰ باز نشد. مسیر C وصل نمی‌شود."
+fi
+
+if [[ \$OPEN_UDP_TEST == 1 ]]; then
+  # پورت‌های تست UDP — بعد از اتمام تست حتما حذف کن
+  gcloud compute firewall-rules create vpn-udp-test \\
+    --direction=INGRESS --action=ALLOW \\
+    --rules="udp:53,udp:1194,udp:\$UDP_TEST_PORT,udp:51820" \\
+    --source-ranges=0.0.0.0/0 --priority=1000 2>/dev/null || true
+  echo "قواعد تست UDP ساخته شد. بعد از تست حذفش کن:"
+  echo "  gcloud compute firewall-rules delete vpn-udp-test"
+fi
 
 echo
 echo "قواعد فعلی:"
 gcloud compute firewall-rules list --format="table(name,allowed[].map().firewall_rule().list(),sourceRanges.list())"
-echo
-echo "برای حذف قواعد تست UDP بعد از اتمام کار:"
-echo "  gcloud compute firewall-rules delete vpn-udp-test"
 FWEOF
 chmod +x "$FW"
 
@@ -727,6 +807,8 @@ cat <<EOM
  ۱) فایروال گوگل کلود را باز کن. این اسکریپت را در Cloud Shell اجرا کن:
        $FW
     (محتوایش را کپی کن و در Cloud Shell بچسبان)
+    پیش‌فرض فقط دو قاعده می‌سازد: مبدأ کلادفلر روی $ORIGIN_PORT و SSH از IAP.
+    اگر مسیر مستقیم C را هم می‌خواهی:  OPEN_DIRECT=1 bash gcloud-firewall.sh
 
  ۲) در کلادفلر یک رکورد DNS بساز:
        Type: A     Name: ${DOMAIN%%.*}     Content: $PUBLIC_IP
@@ -738,9 +820,12 @@ cat <<EOM
 
  ۳) لینک‌های اتصال اینجاست:
        cat $LINKS
-    و QR برای موبایل:
+    و QR برای موبایل (هر سه مسیر A، B و C):
        cat $QR
 
- ۴) هر سه مسیر A، B و C را روی خط ایران تست کن و ببین کدام پایدار است.
+ ۴) آمار مصرف هر کاربر:
+       xray api statsquery --server=127.0.0.1:10085 | head -40
+
+ ۵) مسیر A و B را روی خط ایران تست کن. مسیر C فقط با OPEN_DIRECT=1 معنی دارد.
 
 EOM
