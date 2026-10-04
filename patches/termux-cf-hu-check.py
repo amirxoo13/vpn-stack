@@ -167,6 +167,20 @@ def tcp(ip, port):
         sock.close()
 
 
+def san_covers(domain, names):
+    """*.example.com covers one label (cdn.example.com), not the apex or deeper names."""
+    host = domain.lower().rstrip(".")
+    for raw in names:
+        name = raw.lower().rstrip(".")
+        if name == host:
+            return True
+        if name.startswith("*.") and host.endswith(name[1:]):
+            label = host[: -len(name) + 1]
+            if label and "." not in label:
+                return True
+    return False
+
+
 def upgrade(ip, domain, port, path):
     title("3. TCP + TLS + HTTPUpgrade  %s" % ip)
     ctx = ssl.create_default_context()
@@ -186,7 +200,7 @@ def upgrade(ip, domain, port, path):
             if item[0] == "DNS":
                 names.append(item[1])
         print("cert names:", ", ".join(names) or "none")
-        if domain not in names:
+        if not san_covers(domain, names):
             print("[WARN] certificate has no DNS name %s" % domain)
         key = base64.b64encode(os.urandom(16)).decode()
         req = (

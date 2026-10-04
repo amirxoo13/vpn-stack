@@ -354,47 +354,18 @@ def system_dns_hijack_test():
 
 def mtu_probe(ip, port=443, low=1200, high=1500):
     """
-    بزرگ‌ترین بسته‌ای که بدون تکه‌تکه شدن از مسیر رد می‌شود (Path MTU).
+    Path MTU فقط با تأیید خود مسیر معنی دارد (مثلا ICMP fragmentation-needed).
 
-    این کار فقط با بیت DF معنی دارد. پایتون ثابت IP_MTU_DISCOVER را صادر
-    نمی‌کند، پس روی لینوکس مقدار عددی خودش را می‌گذاریم. روی ویندوز و مک
-    این تست انجام نمی‌شود — عدد ساختگی نمی‌دهیم.
-
-    عدد برگشتی اندازه‌ی کل بسته‌ی IP است، نه پیلود.
+    sendto محلی فقط می‌گوید پشته‌ی خودمان دیتاگرام را قبول کرده، نه اینکه
+    از مسیر رد شده باشد. هر OSError هم «بسته بزرگ است» نیست (فقط EMSGSIZE
+    این معنی را دارد). بدون تأیید مسیر اندازه گزارش نمی‌شود.
     """
+    _ = (low, high)
     if not sys.platform.startswith("linux"):
         return {"status": "UNSUPPORTED(%s: DF در دسترس نیست)" % sys.platform,
                 "max_packet": None}
-
-    IP_MTU_DISCOVER, IP_PMTUDISC_DO = 10, 2     # <linux/in.h>
-
-    ok, label, _ = tcp_connect(ip, port)
-    if not ok:
-        return {"status": "SKIPPED(%s)" % label, "max_packet": None}
-
-    best = None
-    lo, hi = low, high
-    while lo <= hi:
-        mid = (lo + hi) // 2
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.settimeout(2.0)
-        try:
-            s.setsockopt(socket.IPPROTO_IP, IP_MTU_DISCOVER, IP_PMTUDISC_DO)
-            # ۲۸ بایت سرآیند IP + UDP از اندازه‌ی بسته کم می‌شود
-            s.sendto(b"M" * (mid - 28), (ip, port))
-            best = mid
-            lo = mid + 1
-        except OSError:
-            # EMSGSIZE یعنی این اندازه با DF رد نمی‌شود
-            hi = mid - 1
-        finally:
-            try:
-                s.close()
-            except Exception:
-                pass
-    if best is None:
-        return {"status": "NO-ANSWER(<%d)" % low, "max_packet": None}
-    return {"status": "OK", "max_packet": best}
+    return {"status": "UNKNOWN(no path confirmation %s:%s)" % (ip, port),
+            "max_packet": None}
 
 
 # ----------------------------------------------------------------------------

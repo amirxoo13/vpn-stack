@@ -46,6 +46,8 @@ if sys.platform == "win32":
 
 PASS = 0
 FAIL = 0
+TRANSPORT = 0
+INCONCLUSIVE = 0
 
 
 def verdict(good, label, detail=""):
@@ -56,6 +58,19 @@ def verdict(good, label, detail=""):
     else:
         FAIL += 1
         print(f"  {R}[لیک]{N}  {label}" + (f"  — {detail}" if detail else ""))
+
+
+def transport_error(label, detail=""):
+    """خطای شبکه، نه ناسازگاری کشور. جدا از لیک شمرده می‌شود."""
+    global TRANSPORT
+    TRANSPORT += 1
+    print(f"  {Y}[خطای انتقال]{N} {label}" + (f"  — {detail}" if detail else ""))
+
+
+def inconclusive(label, detail=""):
+    global INCONCLUSIVE
+    INCONCLUSIVE += 1
+    print(f"  {Y}[نامشخص]{N} {label}" + (f"  — {detail}" if detail else ""))
 
 
 def note(label, detail=""):
@@ -163,8 +178,8 @@ def main():
             print(f"  {R}>>> ترافیک تو از تونل عبور نمی‌کند. تونل وصل نیست یا مسیریابی اشتباه است.{N}")
         report["egress"] = {"ip": my4, "loc": loc, "colo": kv.get("colo")}
     except Exception as e:
-        verdict(False, "دریافت trace از کلادفلر ناموفق", type(e).__name__)
-        report["egress"] = {"error": type(e).__name__}
+        transport_error("دریافت trace از کلادفلر ناموفق", type(e).__name__)
+        report["egress"] = {"error": type(e).__name__, "kind": "transport"}
 
     if not my4:
         try:
@@ -244,6 +259,7 @@ def main():
     print("\n── ۴) آیا DNS دستکاری‌شده هنوز فعال است؟ ──")
     hijack = []
     clean = []
+    errors = []
     for d in ("www.youtube.com", "twitter.com", "www.bbc.com"):
         try:
             ips = sorted({i[4][0] for i in socket.getaddrinfo(d, 443, socket.AF_INET)})
@@ -254,11 +270,17 @@ def main():
                 clean.append((d, ips))
             note(d, ", ".join(ips))
         except Exception as e:
+            errors.append(d)
             note(d, "خطا: %s" % type(e).__name__)
-    verdict(not hijack, "پاسخ‌های DNS سالم",
-            ("دستکاری‌شده: " + ", ".join(d for d, _ in hijack)) if hijack
-            else "هیچ پاسخی به 10.10.34.x نرفت")
-    report["dns"] = {"hijacked": dict(hijack), "clean": dict(clean)}
+    if hijack:
+        verdict(False, "پاسخ‌های DNS سالم",
+                "دستکاری‌شده: " + ", ".join(d for d, _ in hijack))
+    elif not clean:
+        inconclusive("پاسخ‌های DNS سالم",
+                     "همه‌ی پرس‌وجوها خطا دادند؛ سالم بودن تأیید نشد")
+    else:
+        verdict(True, "پاسخ‌های DNS سالم", "هیچ پاسخی به 10.10.34.x نرفت")
+    report["dns"] = {"hijacked": dict(hijack), "clean": dict(clean), "errors": errors}
 
     # ------------------------------------- ۵) آیا سایت‌های مسدود باز شده‌اند؟
     print("\n── ۵) آیا دامنه‌های مسدود واقعا باز شده‌اند؟ ──")
@@ -271,11 +293,14 @@ def main():
 
     # ------------------------------------------------------------------ نتیجه
     report["blocked_sites"] = reach
-    report["summary"] = {"pass": PASS, "fail": FAIL}
+    report["summary"] = {"pass": PASS, "fail": FAIL,
+                         "transport_error": TRANSPORT, "inconclusive": INCONCLUSIVE}
 
     print("\n" + "=" * 62)
-    if FAIL == 0:
+    if FAIL == 0 and TRANSPORT == 0 and INCONCLUSIVE == 0:
         print(f"{G}نتیجه: {PASS} تست سالم، هیچ لیکی پیدا نشد.{N}")
+    elif FAIL == 0:
+        print(f"{Y}نتیجه: لیک قطعی نیست، ولی {INCONCLUSIVE} مورد نامشخص و {TRANSPORT} خطای انتقال هست.{N}")
     else:
         print(f"{R}نتیجه: {FAIL} مورد مشکل‌دار، {PASS} مورد سالم.{N}")
         print("راه‌حل هر مورد بالای همان بخش نوشته شده.")
