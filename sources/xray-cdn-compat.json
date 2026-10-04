@@ -1,0 +1,828 @@
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "dns": {
+    "servers": [
+      {
+        "address": "localhost",
+        "domains": [
+          "domain:ir"
+        ],
+        "skipFallback": true
+      },
+      "https://1.1.1.1/dns-query"
+    ],
+    "queryStrategy": "UseIPv4"
+  },
+  "inbounds": [
+    {
+      "tag": "socks-in",
+      "listen": "127.0.0.1",
+      "port": 10808,
+      "protocol": "socks",
+      "settings": {
+        "auth": "noauth",
+        "udp": true,
+        "ip": "127.0.0.1"
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ],
+        "routeOnly": false
+      }
+    },
+    {
+      "tag": "http-in",
+      "listen": "127.0.0.1",
+      "port": 10809,
+      "protocol": "http",
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls"
+        ]
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "front-01-bow0ba8q0s",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.96.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h2"
+          ]
+        },
+        "xhttpSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/bow0ba8q0sQmr2RBg",
+          "mode": "auto"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "front-02-bow0ba8q0s",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.97.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h2"
+          ]
+        },
+        "xhttpSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/bow0ba8q0sQmr2RBg",
+          "mode": "auto"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "front-03-nkzgvbjew7",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.96.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h3"
+          ]
+        },
+        "xhttpSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/NKzGvBjEW7JUR0Z",
+          "mode": "auto"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "front-04-nkzgvbjew7",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.97.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h3"
+          ]
+        },
+        "xhttpSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/NKzGvBjEW7JUR0Z",
+          "mode": "auto"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "front-05-k303sna7eg",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.96.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h2"
+          ]
+        },
+        "xhttpSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/k303sna7EgwRJPdf48m3f",
+          "mode": "auto"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "front-06-k303sna7eg",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.97.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h2"
+          ]
+        },
+        "xhttpSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/k303sna7EgwRJPdf48m3f",
+          "mode": "auto"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "front-07-2ktebf4zeq",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.96.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h2"
+          ]
+        },
+        "xhttpSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/2kTebF4ZeqpApKPot",
+          "mode": "auto"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "front-08-2ktebf4zeq",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.97.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h2"
+          ]
+        },
+        "xhttpSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/2kTebF4ZeqpApKPot",
+          "mode": "auto"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "front-09-i2vp4tqkko",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.96.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h2"
+          ]
+        },
+        "xhttpSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/I2VP4TQkKO8hNc95tsQYs6",
+          "mode": "auto"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "front-10-i2vp4tqkko",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.97.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h2"
+          ]
+        },
+        "xhttpSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/I2VP4TQkKO8hNc95tsQYs6",
+          "mode": "auto"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "front-11-y40uskrm0u",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.96.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h3"
+          ]
+        },
+        "xhttpSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/Y40USkrm0UkQzYxfwV9Zx4eTkO",
+          "mode": "auto"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "front-12-y40uskrm0u",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.97.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h3"
+          ]
+        },
+        "xhttpSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/Y40USkrm0UkQzYxfwV9Zx4eTkO",
+          "mode": "auto"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "front-13-tdylm3abox",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.96.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h3"
+          ]
+        },
+        "xhttpSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/tdYLM3AbOxrnfQw06EDm",
+          "mode": "auto"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "front-14-tdylm3abox",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.97.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h3"
+          ]
+        },
+        "xhttpSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/tdYLM3AbOxrnfQw06EDm",
+          "mode": "auto"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "front-15-d53lknyw3m",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.96.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h3"
+          ]
+        },
+        "xhttpSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/D53LKnyw3MgETYJuGOtH8T",
+          "mode": "auto"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "front-16-d53lknyw3m",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.97.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h3"
+          ]
+        },
+        "xhttpSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/D53LKnyw3MgETYJuGOtH8T",
+          "mode": "auto"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "front-17-npmv2ueult",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.96.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "httpupgrade",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        "httpupgradeSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/npmV2UEulTnnz8s"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "front-18-npmv2ueult",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "188.114.97.2",
+            "port": 443,
+            "users": [
+              {
+                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "encryption": "none",
+                "level": 0
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "httpupgrade",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "cdn.amirxo.com",
+          "allowInsecure": false,
+          "fingerprint": "chrome",
+          "alpn": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        "httpupgradeSettings": {
+          "host": "cdn.amirxo.com",
+          "path": "/npmV2UEulTnnz8s"
+        }
+      },
+      "mux": {
+        "enabled": false
+      }
+    },
+    {
+      "tag": "direct",
+      "protocol": "freedom",
+      "settings": {
+        "domainStrategy": "UseIPv4"
+      }
+    },
+    {
+      "tag": "block",
+      "protocol": "blackhole",
+      "settings": {}
+    }
+  ],
+  "observatory": {
+    "subjectSelector": [
+      "front-"
+    ],
+    "probeURL": "https://www.gstatic.com/generate_204",
+    "probeInterval": "3m",
+    "enableConcurrency": true
+  },
+  "routing": {
+    "domainStrategy": "AsIs",
+    "balancers": [
+      {
+        "tag": "bal",
+        "selector": [
+          "front-"
+        ],
+        "strategy": {
+          "type": "leastPing"
+        }
+      }
+    ],
+    "rules": [
+      {
+        "type": "field",
+        "ip": [
+          "geoip:private",
+          "169.254.0.0/16"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "domain:ir"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "protocol": [
+          "bittorrent"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "network": "tcp,udp",
+        "balancerTag": "bal"
+      }
+    ]
+  },
+  "policy": {
+    "levels": {
+      "0": {
+        "handshake": 4,
+        "connIdle": 180
+      }
+    }
+  }
+}
