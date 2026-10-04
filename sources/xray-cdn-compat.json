@@ -1,4 +1,5 @@
 {
+  "remarks": "cdn-compat: 18 front روی 2 IP کلادفلر و 9 مسیر. UUID و مسیرها عمدا نشانه‌گذار هستند (README: شناسه و مسیر زنده در ریپو نگه داشته نمی‌شود). پیش از استفاده PUT-YOUR-UUID-HERE و PUT-YOUR-PATH-N-HERE را با مقدار /etc/vpnstack/state.env پر کن. front-17 و front-18 از نوع httpupgrade هستند و روی nginxِ vpn-setup.sh location ندارند.",
   "log": {
     "loglevel": "warning"
   },
@@ -61,7 +62,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -82,7 +83,7 @@
         },
         "xhttpSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/bow0ba8q0sQmr2RBg",
+          "path": "/PUT-YOUR-PATH-1-HERE",
           "mode": "auto"
         }
       },
@@ -100,7 +101,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -121,7 +122,7 @@
         },
         "xhttpSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/bow0ba8q0sQmr2RBg",
+          "path": "/PUT-YOUR-PATH-1-HERE",
           "mode": "auto"
         }
       },
@@ -139,7 +140,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -160,7 +161,7 @@
         },
         "xhttpSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/NKzGvBjEW7JUR0Z",
+          "path": "/PUT-YOUR-PATH-2-HERE",
           "mode": "auto"
         }
       },
@@ -178,7 +179,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -199,7 +200,7 @@
         },
         "xhttpSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/NKzGvBjEW7JUR0Z",
+          "path": "/PUT-YOUR-PATH-2-HERE",
           "mode": "auto"
         }
       },
@@ -217,7 +218,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -238,7 +239,7 @@
         },
         "xhttpSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/k303sna7EgwRJPdf48m3f",
+          "path": "/PUT-YOUR-PATH-3-HERE",
           "mode": "auto"
         }
       },
@@ -256,7 +257,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -277,7 +278,7 @@
         },
         "xhttpSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/k303sna7EgwRJPdf48m3f",
+          "path": "/PUT-YOUR-PATH-3-HERE",
           "mode": "auto"
         }
       },
@@ -295,7 +296,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -316,7 +317,7 @@
         },
         "xhttpSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/2kTebF4ZeqpApKPot",
+          "path": "/PUT-YOUR-PATH-4-HERE",
           "mode": "auto"
         }
       },
@@ -334,7 +335,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -355,7 +356,7 @@
         },
         "xhttpSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/2kTebF4ZeqpApKPot",
+          "path": "/PUT-YOUR-PATH-4-HERE",
           "mode": "auto"
         }
       },
@@ -373,7 +374,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -394,7 +395,7 @@
         },
         "xhttpSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/I2VP4TQkKO8hNc95tsQYs6",
+          "path": "/PUT-YOUR-PATH-5-HERE",
           "mode": "auto"
         }
       },
@@ -412,7 +413,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -433,7 +434,7 @@
         },
         "xhttpSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/I2VP4TQkKO8hNc95tsQYs6",
+          "path": "/PUT-YOUR-PATH-5-HERE",
           "mode": "auto"
         }
       },
@@ -451,7 +452,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -472,7 +473,7 @@
         },
         "xhttpSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/Y40USkrm0UkQzYxfwV9Zx4eTkO",
+          "path": "/PUT-YOUR-PATH-6-HERE",
           "mode": "auto"
         }
       },
@@ -490,7 +491,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -511,7 +512,7 @@
         },
         "xhttpSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/Y40USkrm0UkQzYxfwV9Zx4eTkO",
+          "path": "/PUT-YOUR-PATH-6-HERE",
           "mode": "auto"
         }
       },
@@ -529,7 +530,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -550,7 +551,7 @@
         },
         "xhttpSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/tdYLM3AbOxrnfQw06EDm",
+          "path": "/PUT-YOUR-PATH-7-HERE",
           "mode": "auto"
         }
       },
@@ -568,7 +569,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -589,7 +590,7 @@
         },
         "xhttpSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/tdYLM3AbOxrnfQw06EDm",
+          "path": "/PUT-YOUR-PATH-7-HERE",
           "mode": "auto"
         }
       },
@@ -607,7 +608,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -628,7 +629,7 @@
         },
         "xhttpSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/D53LKnyw3MgETYJuGOtH8T",
+          "path": "/PUT-YOUR-PATH-8-HERE",
           "mode": "auto"
         }
       },
@@ -646,7 +647,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -667,7 +668,7 @@
         },
         "xhttpSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/D53LKnyw3MgETYJuGOtH8T",
+          "path": "/PUT-YOUR-PATH-8-HERE",
           "mode": "auto"
         }
       },
@@ -685,7 +686,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -707,7 +708,7 @@
         },
         "httpupgradeSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/npmV2UEulTnnz8s"
+          "path": "/PUT-YOUR-PATH-9-HERE"
         }
       },
       "mux": {
@@ -724,7 +725,7 @@
             "port": 443,
             "users": [
               {
-                "id": "3949083e-2725-4eb2-95cf-a6275f18cbe2",
+                "id": "PUT-YOUR-UUID-HERE",
                 "encryption": "none",
                 "level": 0
               }
@@ -746,7 +747,7 @@
         },
         "httpupgradeSettings": {
           "host": "cdn.amirxo.com",
-          "path": "/npmV2UEulTnnz8s"
+          "path": "/PUT-YOUR-PATH-9-HERE"
         }
       },
       "mux": {
@@ -791,6 +792,20 @@
       {
         "type": "field",
         "ip": [
+          "169.254.169.254/32"
+        ],
+        "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "metadata.google.internal"
+        ],
+        "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "ip": [
           "geoip:private",
           "169.254.0.0/16"
         ],
@@ -808,7 +823,7 @@
         "protocol": [
           "bittorrent"
         ],
-        "outboundTag": "direct"
+        "outboundTag": "block"
       },
       {
         "type": "field",

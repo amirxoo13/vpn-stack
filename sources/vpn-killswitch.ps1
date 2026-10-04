@@ -220,7 +220,10 @@ if ($Enable) {
     }
     if ($j -gt 0) { Good "$j قاعده برای کارت مجازی ساخته شد." }
 
-    # شبکه‌ی محلی، DHCP و DNS محلی — تا شبکه‌ی خانه از کار نیفتد
+    # شبکه‌ی محلی، DHCP و لوپ‌بک — تا شبکه‌ی خانه از کار نیفتد.
+    # عمدا هیچ قاعده‌ای برای DNS (UDP/53) به بیرون ساخته نمی‌شود: آن قاعده
+    # دقیقا همان راه لیکی است که این اسکریپت می‌خواهد ببندد. DNS باید از
+    # داخل تونل برود.
     New-NetFirewallRule -DisplayName "$TAG-Allow-LocalSubnet" `
         -Direction Outbound -RemoteAddress LocalSubnet -Action Allow `
         -Profile Any -Enabled True | Out-Null

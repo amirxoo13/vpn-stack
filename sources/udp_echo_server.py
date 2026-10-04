@@ -35,8 +35,17 @@ def primary_internal_ip():
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith("-")]
-    ports = [int(p) for p in args] or [40000]
+    args = sys.argv[1:]
+    bad = [a for a in args if a.startswith("-")]
+    if bad:
+        sys.exit("گزینه‌ی ناشناخته: %s\nاستفاده: sudo python3 udp_echo_server.py 53 40000 51820 1194"
+                 % " ".join(bad))
+    try:
+        ports = [int(p) for p in args] or [40000]
+    except ValueError:
+        sys.exit("پورت باید عدد باشد.\nاستفاده: sudo python3 udp_echo_server.py 53 40000 51820 1194")
+    if any(p < 1 or p > 65535 for p in ports):
+        sys.exit("پورت باید بین ۱ تا ۶۵۵۳۵ باشد.")
     internal = primary_internal_ip()
     print("[i] IP داخلی شناسایی‌شده: %s" % internal)
 
